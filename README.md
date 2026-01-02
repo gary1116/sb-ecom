@@ -41,3 +41,100 @@ public interface CategoryRepository extends JpaRepository<Category,Long> {
 }
 
 Category tells Spring Data which entity this repository manages, and Long tells it the type of that entity’s primary key (@Id).
+
+# VALIDATIONS
+
+- @NotBlank
+    below code with annotation @NotBlank checks if the value given by user is an empty string or not like:- ""
+        @NotBlank
+        private String categoryName;
+
+
+- @Valid
+  Valid tells Spring to validate the incoming request body against the validation rules defined on the Category class before executing the controller method.
+  so since we have added notBlank in categoryName it will validate over that and send appropriate response back from controller
+
+        @PostMapping("/public/categories")
+        public ResponseEntity<String> createCategory(@Valid @RequestBody Category category){
+        categoryService.createCategory(category);
+        return new ResponseEntity<>("Category added successfully",HttpStatus.CREATED);
+        }
+
+- MyGlobalExceptionHandler
+  this is  a custom exception handler where any exceptions will occur this class will handle it
+
+- @RestControllerAdvice
+  this is a specialized version of ControllerAdvice 
+  this is geared towards rest Api so if are using apis we should be using this @RestControllerAdvice
+  if we add this annotation to our class :-MyGlobalExceptionHandler, this will intercept any exception that are thrown by any controller in the application
+
+- @ExceptionHandler
+  this annotation is used to define methods in your exceptionhandler to handle a specific type of exception
+
+
+        @ExceptionHandler(MethodArgumentNotValidException.class)
+        public Map<String, String> myMethodArgumentNotValidException(MethodArgumentNotValidException e){
+        Map<String,String> response= new HashMap<>();
+
+            e.getBindingResult().getAllErrors().forEach(error->{
+                String fieldName=((FieldError)error).getField();
+                String message= error.getDefaultMessage();
+                response.put(fieldName,message);
+            });
+    
+            return response;
+        }
+
+  in above code we are basically telling that we have a exception handler for exception MethodArgumentNotValidException 
+  you need to intercept and you need to execute above method
+  we are accepting the argument which is of the exception object which is of type MethodArgumentNotValidException
+
+- in below line :-
+  e.getBindingResult()
+  Returns a BindingResult object, which contains:
+
+    all validation errors
+    
+    field-level errors
+    
+    global errors
+
+- This line:
+  e.getBindingResult().getAllErrors()
+
+    Returns a list of errors like:
+
+    [
+    FieldError(categoryName, "must not be blank"),
+    FieldError(categoryName, "size must be between 3 and 50")
+    ]
+
+    Looping over validation errors
+    e.getBindingResult().getAllErrors().forEach(error -> {
+
+    Each error here is:
+
+    either a FieldError
+    or an ObjectError
+    You cast it:
+    String fieldName = ((FieldError) error).getField();
+
+    So you extract:
+    categoryName
+    
+    And then:
+    String message = error.getDefaultMessage();
+
+    Which comes from annotations like:
+    @NotBlank(message = "Category name cannot be empty")
+    Building the response map
+    response.put(fieldName, message);
+    So final response looks like:
+    
+    {
+    "categoryName": "Category name cannot be empty"
+    }
+
+- ResourceNotFoundException
+  created a new custom exception which will be used in CategoryServiceImpl
+
