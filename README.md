@@ -370,5 +370,24 @@ So JPA ≠ DB connection
     This is the current page’s data only.
 
 
+# MANAGING PRODUCTS SECTION
+
+added new product model, repository, controller,service 
+in product model added Category object with many to one mapping
+
+    @ManyToOne
+    @JoinColumn(name = "category_id")
+    private Category category;
+
+    Big-picture meaning (one sentence)
+    Many products belong to one category, and this relationship is stored in the database using a foreign key column called category_id in the product table.
 
 
+    What @ManyToOne means conceptually
+    @ManyToOne
+    private Category category;
+
+    This tells JPA: 
+    Many Product rows → One Category row
+    Each product has exactly one category
+    A category can have many products
