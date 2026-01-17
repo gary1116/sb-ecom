@@ -7,7 +7,6 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Data
-@AllArgsConstructor
 @NoArgsConstructor
 public class Product {
 
@@ -18,7 +17,9 @@ public class Product {
     private String productName;
     private String description;
     private Integer quantity;
+    private String image;
     private double price;
+    private double discount;
     private double specialPrice;
 
     @ManyToOne
