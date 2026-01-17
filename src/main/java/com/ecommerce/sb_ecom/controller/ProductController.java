@@ -1,6 +1,5 @@
 package com.ecommerce.sb_ecom.controller;
 
-import com.ecommerce.sb_ecom.model.Product;
 import com.ecommerce.sb_ecom.payload.ProductDTO;
 import com.ecommerce.sb_ecom.payload.ProductResponse;
 import com.ecommerce.sb_ecom.service.ProductService;
@@ -17,10 +16,10 @@ public class ProductController {
     ProductService productService;
 
     @PostMapping("/admin/categories/{categoryId}/product")
-    public ResponseEntity<ProductDTO> addProduct(@RequestBody Product product,
+    public ResponseEntity<ProductDTO> addProduct(@RequestBody ProductDTO productDto,
                                                  @PathVariable Long categoryId){
-        ProductDTO productDTO = productService.addProduct(categoryId, product);
-        return new ResponseEntity<>(productDTO, HttpStatus.CREATED);
+        ProductDTO savedProductDTO = productService.addProduct(categoryId, productDto);
+        return new ResponseEntity<>(savedProductDTO, HttpStatus.CREATED);
     }
 
     @GetMapping("/public/products")
@@ -35,5 +34,31 @@ public class ProductController {
         ProductResponse productResponse = productService.searchByCategory(categoryId);
 
         return new ResponseEntity<>(productResponse,HttpStatus.OK);
+    }
+
+    @GetMapping("/public/products/keyword/{keyword}")
+    public ResponseEntity<ProductResponse> getProductsByKeyword(@PathVariable String keyword){
+        ProductResponse productResponse = productService.searchByKeyword(keyword);
+
+        return new ResponseEntity<>(productResponse, HttpStatus.FOUND);
+    }
+
+    @PutMapping("/admin/products/{productId}")
+    public ResponseEntity<ProductDTO> updateProduct(@RequestBody ProductDTO productDTO,
+                                                    @PathVariable Long productId){
+
+        ProductDTO updateProductDTO = productService.updateProduct(productId, productDTO);
+
+         return new ResponseEntity<>(updateProductDTO,HttpStatus.OK);
+    }
+
+
+    @DeleteMapping("/admin/products/{productId}")
+    public ResponseEntity<ProductDTO> deleteProduct(@PathVariable Long productId){
+
+        ProductDTO productDto= productService.deleteProduct(productId);
+
+        return new ResponseEntity<>(productDto,HttpStatus.OK);
+
     }
 }
