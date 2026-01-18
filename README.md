@@ -391,3 +391,218 @@ in product model added Category object with many to one mapping
     Many Product rows → One Category row
     Each product has exactly one category
     A category can have many products
+
+
+
+# UPDATING PRODUCT IMAGE
+
+- Controller
+  @PutMapping("/products/{productId}/image")
+  public ResponseEntity<ProductDTO> updateProductImage(@PathVariable Long productId,
+  @RequestParam("image")MultipartFile image) throws IOException {
+
+       ProductDTO updatedProductDto= productService.updateProductImage(productId,image);
+
+        return new ResponseEntity<>(updatedProductDto,HttpStatus.OK);
+  }
+
+        What @RequestParam("image") means here
+        @RequestParam is used to extract data from the request, but not from JSON.
+        In this case, it means:
+        “Get the request parameter named image from the incoming HTTP request.”
+
+
+        Q. Why @RequestParam and NOT @RequestBody?
+        Because file uploads are sent as:
+        Content-Type: multipart/form-data
+        NOT as JSON.
+        So this ❌ would not work:
+        @RequestBody MultipartFile image
+        Spring uses @RequestParam to bind multipart fields.
+
+
+        What MultipartFile is
+        public ResponseEntity<ProductDTO> updateProductImage(@PathVariable Long productId, @RequestParam("image")MultipartFile image)
+        MultipartFile is a Spring abstraction for uploaded files. 
+        It represents:
+        the uploaded file
+        in memory or temporary disk storage
+        BEFORE you save it permanently
+        It provides methods like:
+        image.getOriginalFilename()
+        image.getInputStream()
+        image.getSize()
+        image.getContentType()
+
+        ***So when Postman sends:*** 
+        Key: image
+        Type: File
+        Value: robot.jpg
+
+        ***Spring:***
+        Parses the multipart request
+        Finds the image field
+        Wraps it in a MultipartFile
+        Injects it into your method
+
+
+- private String uploadImage(String path, MultipartFile file) throws IOException Method
+
+        private String uploadImage(String path, MultipartFile file) throws IOException {
+
+        // get File names of current/original file
+        String originalFileName= file.getOriginalFilename();
+
+        //generate a unique file name
+        String randomId= UUID.randomUUID().toString();
+        //        if file name-> Gary.jpg -> random id -> 1234-> it will be saved as 1234.jpg
+        // this will give the extension originalFileName.substring(originalFileName.lastIndexOf('.')
+        // like .jpg, .jpeg and concat with randomId created above
+        String fileName= randomId.concat(originalFileName.substring(originalFileName.lastIndexOf('.')));
+        //pathSeparator is nothing but a forward slash "/"
+        String filePath=path+ File.separator+fileName;
+
+        //check if path exist and create
+        File folder=new File(path);
+        if(!folder.exists())
+            folder.mkdir();
+
+        // upload to server
+        Files.copy(file.getInputStream(), Paths.get(filePath));
+        return fileName;
+
+        }
+
+***private String uploadImage(String path, MultipartFile file) throws IOException***
+- Meaning:
+        takes the upload directory path
+        takes the uploaded file
+        returns the final stored filename
+
+***Step 1: Get original file name***
+        java
+        String originalFileName = file.getOriginalFilename();
+        If user uploads:
+        robot.jpg
+        Then:
+        originalFileName = "robot.jpg"
+        This is the client-side filename.
+
+***Step 2: Generate a unique ID***
+        java
+        String randomId = UUID.randomUUID().toString();
+        Why?
+        Prevent filename clashes
+        Two users uploading image.jpg won’t overwrite each other
+        Example:
+        randomId = "a3f9-2c91-4e2d-b8f1"
+***Step 3: Preserve file extension***
+        originalFileName.substring(originalFileName.lastIndexOf('.'))
+        For:
+        robot.jpg
+        This extracts:
+        .jpg
+        So final filename becomes:
+        String fileName = randomId.concat(".jpg");
+        Example:
+        a3f9-2c91-4e2d-b8f1.jpg
+***Step 4: Build file path***
+        String filePath = path + File.separator + fileName;
+        If:
+        path = "images"
+        Then:
+        images/a3f9-2c91-4e2d-b8f1.jpg
+        This is where the file will be stored.
+***Step 5: Ensure directory exists***
+        File folder = new File(path);
+        if (!folder.exists())
+        folder.mkdir();
+
+        What new File(path) really means
+        File folder = new File("images");
+        This does NOT create a folder
+
+        It only creates a Java object that represents:
+        “a directory (or file) named images on disk”
+
+        Think of it like:
+        “a reference to a possible folder”
+        
+        At this point:
+        No folder is created
+        Java is just pointing to a location
+
+        What folder.exists() checks
+        folder.exists()
+        
+        This asks the OS:
+        “Does a file or directory named images already exist on disk?”
+        ✅ true → folder already exists
+        ❌ false → folder does NOT exist
+
+        What folder.mkdir() actually does
+        folder.mkdir();
+        
+        This tells the OS:
+        “Create a directory named images at this path.”
+        So if your project is running from:
+        C:/projects/sb-ecom/
+        Then after mkdir():
+        C:/projects/sb-ecom/images/
+        is created on disk.
+
+
+***Step 6: Save the file to disk***
+        Files.copy(file.getInputStream(), Paths.get(filePath));
+
+A) file.getInputStream()
+What is an InputStream (simple meaning)
+
+An InputStream is:
+      A stream of bytes that Java can read sequentially
+      Think of it like:
+      “a pipe from which Java can read file data bit by bit”
+      What MultipartFile is holding
+
+When a file is uploaded:
+      It’s temporarily stored in memory or temp disk
+      It is not yet saved permanently
+
+So:
+file.getInputStream()
+means:
+      “Give me a stream to read the uploaded file’s raw bytes”
+
+At this point:
+        File is still temporary
+        Java hasn’t written it anywhere permanent yet
+        B) Paths.get(filePath)
+        Paths.get("images/abc123.jpg")
+
+
+This creates a Path object representing:
+
+“the destination where the file should be written”
+It’s the target location on disk.
+
+C) What Files.copy() does
+Files.copy(inputStream, destinationPath);
+
+This literally means:
+        “Read bytes from this stream
+        and write them into this file path”
+        Step-by-step:
+        Open input stream (uploaded file)
+        Open output stream (new file on disk)
+        Copy bytes chunk by chunk
+        Close streams automatically
+        
+After this line:
+        File exists physically on disk
+        Upload is complete
+
+
+***Step 7: Return filename***
+        return fileName;
+        You store only the filename in DB, not the whole path.
+    
