@@ -9,15 +9,13 @@ import com.ecommerce.sb_ecom.repository.CategoryRepository;
 import com.ecommerce.sb_ecom.repository.ProductRepository;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
+
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.List;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,6 +29,12 @@ public class ProductServiceImpl implements ProductService {
 
     @Autowired
     private ModelMapper modelMapper;
+
+    @Autowired
+    private FileService fileService;
+
+    @Value("${project.image}")
+    private String path;
 
     @Override
     public ProductDTO addProduct(Long categoryId, ProductDTO productDTO) {
@@ -132,8 +136,7 @@ public class ProductServiceImpl implements ProductService {
                 .orElseThrow(()->new ResourceNotFoundException("Product","ProductId",productId));
 
         //get the file name of uploaded image
-        String path="images/";
-        String fileName =uploadImage(path, image);
+        String fileName =fileService.uploadImage(path, image);
         //updating the new file name to the product
         productFromDb.setImage(fileName);
         //save updated product
@@ -143,27 +146,4 @@ public class ProductServiceImpl implements ProductService {
 
     }
 
-    private String uploadImage(String path, MultipartFile file) throws IOException {
-
-        // get File names of current/original file
-        String originalFileName= file.getOriginalFilename();
-
-        //generate a unique file name
-        String randomId= UUID.randomUUID().toString();
-//        if file name-> Gary.jpg -> random id -> 1234-> it will be saved as 1234.jpg
-            // this will give the extension originalFileName.substring(originalFileName.lastIndexOf('.')
-            // like .jpg, .jpeg and concat with randomId created above
-        String fileName= randomId.concat(originalFileName.substring(originalFileName.lastIndexOf('.')));
-        //pathSeparator is nothing but a forward slash "/"
-        String filePath=path+ File.separator+fileName;
-
-        //check if path exist and create
-        File folder=new File(path);
-        if(!folder.exists())
-            folder.mkdir();
-
-        // upload to server
-        Files.copy(file.getInputStream(), Paths.get(filePath));
-        return fileName;
-    }
 }
