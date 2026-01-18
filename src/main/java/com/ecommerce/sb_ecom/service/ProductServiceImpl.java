@@ -1,5 +1,6 @@
 package com.ecommerce.sb_ecom.service;
 
+import com.ecommerce.sb_ecom.exceptions.ApiException;
 import com.ecommerce.sb_ecom.exceptions.ResourceNotFoundException;
 import com.ecommerce.sb_ecom.model.Category;
 import com.ecommerce.sb_ecom.model.Product;
@@ -42,14 +43,27 @@ public class ProductServiceImpl implements ProductService {
                 .orElseThrow(() ->
                         new ResourceNotFoundException("Category","categoryId",categoryId));
 
-        Product product=modelMapper.map(productDTO,Product.class);
-        product.setImage("default.png");
-        product.setCategory(category);
-        double specialPrice = product.getPrice() -
-                ((product.getDiscount() * 0.01) * product.getPrice());
-        product.setSpecialPrice(specialPrice);
-        Product savedProduct = productRepository.save(product);
-        return modelMapper.map(savedProduct, ProductDTO.class);
+        boolean isProductNotPresent =true;
+        List<Product> products=category.getProducts();
+        for(int i =0;i<products.size();i++){
+                if(products.get(i).getProductName().equals(productDTO.getProductName())){
+                    isProductNotPresent=false;
+                    break;
+                }
+        }
+
+        if (isProductNotPresent) {
+            Product product = modelMapper.map(productDTO, Product.class);
+            product.setImage("default.png");
+            product.setCategory(category);
+            double specialPrice = product.getPrice() -
+                    ((product.getDiscount() * 0.01) * product.getPrice());
+            product.setSpecialPrice(specialPrice);
+            Product savedProduct = productRepository.save(product);
+            return modelMapper.map(savedProduct, ProductDTO.class);
+        }else{
+            throw new ApiException("Product already exists!!");
+        }
     }
 
     @Override
@@ -58,6 +72,10 @@ public class ProductServiceImpl implements ProductService {
         List<ProductDTO> productDTOS=products.stream()
                 .map(product -> modelMapper.map(product, ProductDTO.class))
                 .collect(Collectors.toList());
+
+        if(products.isEmpty()){
+            throw new ApiException("there are no products");
+        }
 
         ProductResponse productResponse= new ProductResponse();
         productResponse.setContent(productDTOS);
@@ -103,7 +121,6 @@ public class ProductServiceImpl implements ProductService {
 
         Product productFromDb = productRepository.findById(productId)
         .orElseThrow(()->new ResourceNotFoundException("Product","ProductId",productId));
-
         Product product=modelMapper.map(productDTO,Product.class);
 
 
@@ -145,5 +162,4 @@ public class ProductServiceImpl implements ProductService {
         return modelMapper.map(updatedProduct,ProductDTO.class);
 
     }
-
 }
