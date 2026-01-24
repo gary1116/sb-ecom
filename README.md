@@ -370,6 +370,732 @@ So JPA ≠ DB connection
     This is the current page’s data only.
 
 
+
+**************************************************************************************************************************************************************
+
+**********************************Socialmedia Backend miniproject learning part for springdata jpa to use db related annotations**********************************
+- git link :- https://github.com/gary1116/socialMedia_backend
+
+# ONE TO ONE RELATIONSHIPS
+
+- SocialUser
+
+        package com.social.demo.models;
+        import jakarta.persistence.Entity;
+        import jakarta.persistence.GeneratedValue;
+        import jakarta.persistence.GenerationType;
+        import jakarta.persistence.Id;
+        
+        @Entity
+        public class SocialUser {
+        
+            @Id
+            @GeneratedValue(strategy = GenerationType.IDENTITY)
+            private Long id;
+        
+        }
+
+
+- Profile
+
+        package com.social.demo.models;
+
+        import jakarta.persistence.*;
+        
+        @Entity
+        public class Profile {
+        
+            @Id
+            @GeneratedValue(strategy = GenerationType.IDENTITY)
+            private Long id;
+        
+        
+            @OneToOne
+            @JoinColumn(name = "social_user")
+            private SocialUser socialUser;
+        
+        }
+
+
+here
+@OneToOne
+@JoinColumn(name = "social_user")
+private SocialUser socialUser;
+🧠 Big picture (VERY IMPORTANT)
+You are saying:
+
+Each Profile is linked to exactly ONE SocialUser
+
+That’s it.
+This is a One-to-One relationship.
+
+Think of it like:
+
+
+SocialUser  <---->  Profile
+One user → one profile
+One profile → one user
+
+🧩 What does @OneToOne actually mean?
+1️⃣ @OneToOne (relationship definition)
+java
+Copy code
+@OneToOne
+private SocialUser socialUser;
+This tells JPA:
+
+“This field is NOT a normal column.
+It represents a relationship to another table.”
+
+Without this annotation:
+
+JPA would treat SocialUser as a normal Java object
+
+❌ That would NOT work in DB mapping
+
+So:
+
+@OneToOne =
+👉 This entity is related to another entity in a one-to-one manner
+
+🔗 What does @JoinColumn do?
+java
+Copy code
+@JoinColumn(name = "social_user")
+This answers WHERE and HOW the relationship is stored.
+
+It tells JPA:
+“Create a foreign key column in the profile table
+that references social_user.id”
+
+🗄️ Database tables created (VERY IMPORTANT)
+🔹 social_user table
+id
+1
+2
+
+🔹 profile table (with @JoinColumn)
+id	social_user
+10	1
+11	2
+
+➡️ social_user is a FOREIGN KEY
+➡️ It points to social_user.id
+
+This is the actual link between the tables.
+
+- Why is Profile owning the relationship?
+
+        Because the foreign key is inside profile table.
+        
+        @JoinColumn(name = "social_user")
+        
+        
+        ➡️ Profile owns the relationship
+        ➡️ SocialUser does NOT need to know anything (yet)
+        
+        This is called the owning side
+
+
+# BI-DIRECTIONAL MAPPING IN ONE TO ONE RELATIONSHIPS
+
+
+wo entities that both know about each other:
+
+SocialUser  <------>  SocialProfile
+
+
+SocialProfile → knows its SocialUser
+
+SocialUser → knows its SocialProfile
+
+This is called a bidirectional relationship.
+
+🧠 The MOST IMPORTANT RULE (memorize this)
+
+Only ONE side owns the relationship
+
+The owning side is the one that has the foreign key
+
+In your code:
+
+@JoinColumn(name = "social_user")
+private SocialUser socialUser;
+
+
+➡️ SocialProfile is the OWNING side
+➡️ SocialUser is the INVERSE (non-owning) side
+
+🔍 Let’s analyze each class separately
+1️⃣ SocialProfile (OWNING SIDE)
+@OneToOne
+@JoinColumn(name = "social_user")
+private SocialUser socialUser;
+
+What this means:
+
+This side:
+
+✅ Creates the foreign key
+
+✅ Controls the DB relationship
+
+✅ Decides how rows are linked
+
+Database result:
+
+social_profile
+
+id	social_user
+1	10
+
+➡️ social_user is a foreign key → social_user.id
+
+🔥 This side writes to the database
+
+2️⃣ SocialUser (INVERSE SIDE)
+@OneToOne(mappedBy = "socialUser")
+private SocialProfile socialProfile;
+
+What does mappedBy = "socialUser" mean?
+
+It literally means:
+
+“I do NOT own this relationship.
+The relationship is already mapped by the field
+socialUser inside SocialProfile.”
+
+So JPA understands:
+
+❌ Do NOT create another foreign key
+
+❌ Do NOT create another join table
+
+✅ Just reuse the existing mapping
+
+🧠 Why is mappedBy REQUIRED here?
+
+Without mappedBy:
+
+@OneToOne
+private SocialProfile socialProfile;
+
+
+JPA would think:
+
+“Oh, another relationship!
+I’ll create ANOTHER foreign key or join table 😈”
+
+That leads to:
+
+Duplicate mappings
+
+Extra tables
+
+Broken schema
+
+Confusing bugs
+
+mappedBy prevents that.
+
+🗄️ Final database structure (VERY IMPORTANT)
+
+Even after adding @OneToOne in SocialUser…
+
+👉 DATABASE DOES NOT CHANGE
+
+Still only two tables:
+
+social_user
+
+| id |
+
+social_profile
+
+| id | social_user (FK) |
+
+✔ No new column
+✔ No new table
+✔ No duplicate foreign key
+
+One-line mental model (interview gold)
+
+@JoinColumn = owns the relationship
+mappedBy = points to the owner
+
+# ONE TO MANY RELATIONSHIP AND MANY TO ONE
+
+What tables/columns will be created?
+social_user table
+
+id (PK)
+
+post table
+
+id (PK)
+
+user_id (FK → social_user.id) ✅ because of:
+
+@ManyToOne
+@JoinColumn(name="user_id")
+private SocialUser socialUser;
+
+
+So yes: user_id will be a column in post table and it will store the social_user.id.
+
+🔥 Who “handles” (owns) the relationship?
+
+In JPA:
+
+The side with the foreign key is the owning side.
+
+Here, the FK is in Post, so:
+
+✅ Post.socialUser (@ManyToOne + @JoinColumn) = owning side
+
+❌ SocialUser.post (@OneToMany(mappedBy="socialUser")) = inverse side
+
+So your line:
+
+“one to many relationship which is handled by Post class…”
+
+✅ Correct: Post is the one that actually controls the DB link, because it contains the FK column.
+
+What exactly does mappedBy = "socialUser" mean here?
+@OneToMany(mappedBy = "socialUser")
+private List<Post> post = new ArrayList<>();
+
+
+This tells JPA:
+
+“Don’t create another column/table for this.
+The relationship is already stored in Post.socialUser.”
+
+So JPA will NOT create:
+
+a social_user_id column in social_user table (doesn’t make sense)
+
+a join table like social_user_posts (that would happen if you didn’t use mappedBy)
+
+✅ What happens at runtime when you save?
+Important rule:
+
+Only setting user.getPost().add(post) is not enough to persist the FK.
+
+Because the inverse side (OneToMany) does not write the FK.
+
+You must set the owning side:
+
+post.setSocialUser(user);  // this sets user_id in post table
+
+
+Best practice: keep both sides in sync using a helper:
+
+public void addPost(Post p) {
+post.add(p);
+p.setSocialUser(this);
+}
+
+Your final question (answer)
+
+“So JPA will see SocialUser class and see one-to-many relationship which is handled by Post class which will have column user_id in post table?”
+
+✅ Yes — the @OneToMany in SocialUser is mainly for navigation (user → posts).
+✅ The actual column user_id is created because of the @ManyToOne @JoinColumn in Post.
+
+- Post -> SocialUser (owning side, writes FK)
+- SocialUser -> List<Post> (inverse side, for navigation)
+
+
+
+# MANY TO MANY RELATIONSHIP
+
+The relationship is stored in a separate join table (user_group) that contains two foreign keys:
+
+user_id → social_user.id
+
+group_id → groups.id
+
+And yes: SocialUser is the owning side in your code (because it defines @JoinTable). Groups is the inverse side (because it uses mappedBy).
+
+- Now I’ll explain only the many-to-many part line by line. (check SocialUser and Groups class for reference)
+
+SocialUser: Many-to-many part (line by line)
+@ManyToMany
+
+
+Says: one user can be in many groups AND one group can have many users.
+
+@JoinTable(
+name="user_group",
+
+
+Tells JPA: create/use a join table named user_group (this table holds the mapping).
+
+    joinColumns=@JoinColumn(name="user_id"),
+
+
+This is the FK column in user_group that points to THIS entity’s table (social_user).
+
+So user_group.user_id references social_user.id.
+
+    inverseJoinColumns=@JoinColumn(name="group_id")
+
+
+This is the FK column in user_group that points to the other entity’s table (groups).
+
+So user_group.group_id references groups.id.
+
+private Set<Groups> groups = new HashSet<>();
+
+
+In Java: a user has a set of Groups (set avoids duplicates like same group added twice).
+
+✅ Because SocialUser declares @JoinTable, this is the OWNING side.
+
+Groups: Many-to-many part (line by line)
+@ManyToMany(mappedBy = "groups")
+
+
+mappedBy = "groups" means:
+
+“The join table mapping is already defined on the other side — in SocialUser.groups.”
+So Groups will NOT create another join table.
+This side is inverse / non-owning side.
+private Set<SocialUser> socialUsers = new HashSet<>();
+
+
+In Java: a group has a set of users.
+
+- Mental model you should keep
+
+Entity PK → always @Id
+FK column name → customizable with @JoinColumn
+Linking logic → entity + PK, not column name
+Defaults exist → annotations override them
+- One-liner you can remember (interview safe)
+
+“JPA links entities using primary keys, not column names —
+@JoinColumn only controls how the foreign key column is named.”
+
+
+- regarding joincolumns, inverseJoinColumns
+  @JoinTable(
+  name = "user_group",
+  joinColumns = @JoinColumn(name = "user_id"),
+  inverseJoinColumns = @JoinColumn(name = "group_id")
+  )
+
+what problem do these two solve?
+A join table has TWO foreign keys.
+
+So JPA must know:
+Which FK column points to THIS entity?
+Which FK column points to the OTHER entity?
+That is exactly what these two attributes answer.
+
+Meaning in plain English
+
+- joinColumns
+
+      “This column belongs to ME (the owning entity).”
+          Here:
+          Owning entity = SocialUser
+          So:
+          user_group.user_id → social_user.id
+
+    -  inverseJoinColumns
+
+            “This column belongs to the OTHER entity.”
+            Here:
+            Other entity = Groups
+            So:
+            user_group.group_id → groups.id
+
+# DATAINITIALIZER
+
+**EXPLANATION**
+
+- @Configuration — what it does
+  @Configuration
+  public class DataInitializer {
+  Meaning (one line):
+  Tells Spring that this class defines beans and should be instantiated and managed by the ApplicationContext.
+  Because of this:
+  Spring creates one object of DataInitializer
+  Constructor injection works
+  @Bean methods inside are executed
+------------------------------------------------------
+- @Bean — what it does
+  @Bean
+  public CommandLineRunner initializeData() {
+
+Meaning (one line):
+Registers the returned CommandLineRunner as a Spring bean that runs automatically after the application context is fully initialized.
+Because of this:
+Spring calls initializeData()
+Stores the returned runner
+Executes it at startup
+
+**Code blocks — one line per block (exactly)**
+- Block 1: Create users
+  SocialUser user1 = new SocialUser();
+  SocialUser user2 = new SocialUser();
+  SocialUser user3 = new SocialUser();
+  ➡️ Creates three user objects in memory.
+
+- Block 2: Save users
+  userRepository.save(user1);
+  userRepository.save(user2);
+  userRepository.save(user3);
+  ➡️ Persists users into the social_user table and assigns IDs.
+
+- Block 3: Create groups
+  Groups group1 = new Groups();
+  Groups group2 = new Groups();
+  ➡️ Creates two group objects in memory.
+
+- Block 4: Add users to groups (inverse side)
+  group1.getSocialUsers().add(user1);
+  group1.getSocialUsers().add(user2);
+  group2.getSocialUsers().add(user2);
+  group2.getSocialUsers().add(user3);
+  ➡️ Updates Java-side group↔user relationship (inverse side, not DB-owning).
+
+- Block 5: Save groups
+  groupRepository.save(group1);
+  groupRepository.save(group2);
+  ➡️ Persists groups into the groups table.
+
+- Block 6: Associate users with groups (owning side)
+  user1.getGroups().add(group1);
+  user2.getGroups().add(group1);
+  user2.getGroups().add(group2);
+  user3.getGroups().add(group2);
+  ➡️ Sets the owning side of the many-to-many relationship.
+
+- Block 7: Save users again
+  userRepository.save(user1);
+  userRepository.save(user2);
+  userRepository.save(user3);
+  ➡️ Writes entries into the user_group join table.
+
+- Block 8: Create posts
+  Post post1 = new Post();
+  Post post2 = new Post();
+  Post post3 = new Post();
+  ➡️ Creates three post objects in memory.
+
+- Block 9: Associate posts with users
+  post1.setSocialUser(user1);
+  post2.setSocialUser(user2);
+  post3.setSocialUser(user3);
+  ➡️ Sets the owning side of the many-to-one relationship.
+
+- Block 10: Save posts
+  postRepository.save(post1);
+  postRepository.save(post2);
+  postRepository.save(post3);
+  ➡️ Persists posts with user_id foreign key in the post table.
+
+- Block 11: Create profiles
+  SocialProfile profile1 = new SocialProfile();
+  SocialProfile profile2 = new SocialProfile();
+  SocialProfile profile3 = new SocialProfile();
+  ➡️ Creates profile objects in memory.
+
+- Block 12: Associate profiles with users
+  profile1.setUser(user1);
+  profile2.setUser(user2);
+  profile3.setUser(user3);
+  ➡️ Sets the owning side of the one-to-one relationship.
+
+- Block 13: Save profiles
+  socialProfileRepository.save(profile1);
+  socialProfileRepository.save(profile2);
+  socialProfileRepository.save(profile3);
+  ➡️ Persists profiles with social_user foreign key.
+
+***One-screen summary (remember this)***
+
+@Configuration → Spring creates & manages this class
+
+@Bean → Spring executes and registers what the method returns
+
+CommandLineRunner → runs after startup
+
+Repositories → write data to DB
+
+Owning side → decides foreign keys / join tables
+
+# regaring spring beans
+
+@Component
+→ Generic Spring bean
+
+@Configuration
+→ Special component used to define other beans
+
+@Service
+→ Component that holds business logic
+
+@Repository
+→ Component that talks to the database
+
+@Controller
+→ Component that handles web requests
+
+
+# What is cascading?
+
+Cascading means: “Do the same database operation to related objects automatically.”
+
+That’s it.
+Without cascading (what you’re doing now)
+
+    You do this manually:
+    
+    userRepository.save(user);
+    postRepository.save(post);
+    profileRepository.save(profile);
+    
+    
+    You are saying:
+    
+    “Save user, then save everything related one by one.”
+
+With cascading
+
+    You do this:
+    userRepository.save(user);
+    
+    And Spring/JPA automatically:
+    
+    saves the profile
+    saves the posts
+    updates join tables
+    Because you told it:
+    “When I save/delete this object, apply the same operation to its related objects.”
+
+*****TYPES OF CASCADING*****
+
+1️⃣ CascadeType.PERSIST
+When you save the parent, the child is also saved.
+@OneToMany(cascade = CascadeType.PERSIST)
+userRepository.save(user); // saves posts too
+
+Use when:
+Child should be created only with parent
+
+2️⃣ CascadeType.MERGE
+When you update the parent, the child is also updated.
+@OneToMany(cascade = CascadeType.MERGE)
+user.setName("New Name");
+userRepository.save(user); // updates children
+
+
+Use when:
+You edit child data via parent
+
+3️⃣ CascadeType.REMOVE
+When you delete the parent, the child is also deleted.
+@OneToMany(cascade = CascadeType.REMOVE)
+userRepository.delete(user); // deletes posts too
+
+
+⚠️ Dangerous if children are shared.
+
+4️⃣ CascadeType.REFRESH
+When parent is refreshed from DB, children are refreshed too.
+@OneToMany(cascade = CascadeType.REFRESH)
+
+
+Use when:
+You want latest DB state for children
+
+5️⃣ CascadeType.DETACH
+When parent is detached from persistence context, children are detached too.
+@OneToMany(cascade = CascadeType.DETACH)
+
+
+Use when:
+You manually manage entity states
+
+6️⃣ CascadeType.ALL
+Does everything above (PERSIST, MERGE, REMOVE, REFRESH, DETACH).
+@OneToMany(cascade = CascadeType.ALL)
+
+
+Most common choice.
+
+Relationship	Recommended cascade
+One-to-One (User → Profile)	ALL
+One-to-Many (User → Post)	ALL
+Many-to-Many (User ↔ Groups)	❌ Avoid REMOVE
+
+
+
+hich cascade runs on which operation
+✅ CascadeType.PERSIST
+
+Triggers when you create/save a NEW parent (persist)
+
+✅ child is inserted too
+
+❌ does not delete child
+
+When it happens: entityManager.persist(parent) (and usually repo.save(parent) for new entities)
+
+✅ CascadeType.MERGE
+
+Triggers when you update/attach an existing parent (merge)
+
+✅ child is updated/merged too
+
+❌ does not delete child
+
+When it happens: entityManager.merge(parent) (often repo.save(parent) when parent already has an id)
+
+✅ CascadeType.REMOVE
+
+Triggers when you delete the parent
+
+✅ child is deleted too
+
+❌ does not save/update child
+
+When it happens: entityManager.remove(parent) / repo.delete(parent)
+
+✅ CascadeType.REFRESH
+
+Triggers when you refresh parent from DB
+
+✅ child is refreshed too
+
+❌ no save/update/delete
+
+When it happens: entityManager.refresh(parent)
+
+✅ CascadeType.DETACH
+
+Triggers when you detach parent from persistence context
+
+✅ child becomes detached too
+
+❌ no save/update/delete
+
+When it happens: entityManager.detach(parent) (less common in Spring apps)
+
+✅ CascadeType.ALL
+
+Includes: PERSIST + MERGE + REMOVE + REFRESH + DETACH
+
+So: save + update + delete + refresh + detach all cascade.
+
+
+**************************************************************************************************************************************************************
+
+
 # MANAGING PRODUCTS SECTION
 
 added new product model, repository, controller,service 
@@ -605,4 +1331,930 @@ After this line:
 ***Step 7: Return filename***
         return fileName;
         You store only the filename in DB, not the whole path.
-    
+
+
+
+**************************************************************************************************************************************************************
+
+**********************************Spring security miniproject learning part for spring security related code**********************************
+- git link :- https://github.com/gary1116/SpringSecurity
+
+
+***code***
+
+@EnableWebSecurity
+@EnableMethodSecurity
+@Bean
+SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception{
+http.authorizeHttpRequests((requests)->requests.
+requestMatchers("/h2-console/**").permitAll()
+.anyRequest().authenticated());
+http.sessionManagement(session->session.sessionCreationPolicy(SessionCreationPolicy.STATELESS   ));
+http.formLogin(withDefaults());
+http.httpBasic(withDefaults());
+http.headers(headers->
+headers.frameOptions(frameOptionsConfig ->
+frameOptionsConfig.sameOrigin()));
+http.csrf(csrf->csrf.disable());
+return http.build();
+}
+
+**********
+
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+- @Configuration:
+  this class contributes beans.
+
+    - @EnableWebSecurity:
+      Registers SecurityFilterChain
+      Hooks it into the Servlet filter pipeline
+      Ensures every HTTP request passes through security filters
+      SecurityConfig is your configuration class.
+
+
+@Bean
+SecurityFilterChain defaultSecurityFilterChain(HttpSecurity http) throws Exception{
+- @Bean:
+  registers the returned SecurityFilterChain in the ApplicationContext.
+
+Method name defaultSecurityFilterChain is just the bean name by default.
+
+- HttpSecurity http: Spring injects/provides the HttpSecurity builder into this method so you can configure it.
+
+- throws Exception: many HttpSecurity configuration calls can throw checked exceptions.
+
+
+- http.authorizeHttpRequests((requests)->requests.requestMatchers("/h2-console/**").permitAll().anyRequest().authenticated());
+  This sets authorization rules (who can access what).
+  authorizeHttpRequests(...): start defining access rules for HTTP endpoints.
+  requestMatchers("/h2-console/**").permitAll():
+  any URL like /h2-console, /h2-console/login.do, etc. is allowed without login.
+  /** means “anything under this path”.
+  .anyRequest().authenticated():
+  every other endpoint must be logged in.
+  ✅ So: H2 console public, everything else protected.
+
+
+- http.sessionManagement(session->session.sessionCreationPolicy(SessionCreationPolicy.STATELESS));
+  Configures session behavior.
+
+-> SessionCreationPolicy.STATELESS
+It means:
+Spring Security will not create or use an HTTP session
+So no JSESSIONID cookie is used to remember the user
+➡️ In practice: no session cookie-based auth
+
+STATELESS means:
+
+Spring Security will not create or use HTTP sessions to store authentication.
+This is typical for REST APIs with JWT or token-based auth.
+Important: if you are using formLogin() (session-based) this doesn’t match the usual approach, because form login typically relies on a session to remember the logged-in user.
+So here you’ve mixed two styles:
+
+STATELESS (API/token style)
+formLogin() (session/browser style)
+It can still compile, but behavior might be confusing.
+
+- http.formLogin(withDefaults());
+  Enables form-based login with default settings.
+  Default behavior:
+  Spring Security auto-generates a login page if you didn’t create one.
+  When you submit credentials, it authenticates and (normally) stores auth in the session.
+  Again: this normally expects stateful session behavior.
+
+- http.httpBasic(withDefaults());
+  Enables HTTP Basic authentication (username/password sent in the Authorization: Basic ... header).
+  This is common for quick testing with Postman/curl, internal services, etc.
+  With stateless APIs, Basic can work (each request sends credentials).
+
+
+- http.headers(headers->headers.frameOptions(frameOptionsConfig ->frameOptionsConfig.sameOrigin()));
+  This is specifically for H2 console (and other pages that use HTML frames/iframes).
+  Modern browsers + Spring Security block pages from being shown in an <iframe> to prevent clickjacking.
+  H2 console UI is served in a way that needs frames/iframes.
+  frameOptions().sameOrigin() means:
+  allow framing only if the page is from the same origin (same domain/host).
+  safer than disabling frame options entirely.
+  ✅ Without this, you often get a blank page / refused to display H2 console.
+
+
+- http.csrf(csrf->csrf.disable());
+  Disables CSRF protection.
+  CSRF protection mainly matters for browser session-based apps using cookies.
+  H2 console does POST requests and often breaks when CSRF is enabled (you’ll see 403 errors).
+  ✅ Disabling CSRF makes H2 console usable easily during dev.
+
+- return http.build();
+  Finalizes the configuration and builds the SecurityFilterChain object that Spring Security will use to secure requests.
+
+
+***code***
+
+@Bean
+public UserDetailsService userDetailsService(){
+UserDetails user1= User.withUsername("user1")
+.password("{noop}password1")
+.roles("USER")
+.build();
+UserDetails admin= User.withUsername("admin")
+.password("{noop}adminPass")
+.roles("ADMIN")
+.build();
+JdbcUserDetailsManager userDetailsManager=
+new JdbcUserDetailsManager(dataSource);
+userDetailsManager.createUser(user1);
+userDetailsManager.createUser(admin);
+return userDetailsManager;
+}
+
+***********
+
+
+What is DataSource?
+
+In simple words:
+DataSource is a factory that gives database connections to your application.
+Instead of writing:
+
+DriverManager.getConnection(...)
+Spring gives you:
+
+DataSource
+which:
+knows DB URL
+knows username / password
+knows driver
+manages connections properly
+
+Where did this DataSource come from?
+
+You did NOT create it manually, right?
+Spring Boot created it automatically because you added:
+
+- spring.datasource.url=jdbc:h2:mem:test
+- spring.h2.console=true
+  When Spring Boot sees:
+  spring.datasource.url
+  H2 on the classpath
+
+➡️ It auto-configures a DataSource bean.
+
+So this works:
+
+- @Autowired
+- DataSource dataSource;
+  because Spring already has a DataSource bean ready.
+
+What database is this DataSource pointing to?
+- spring.datasource.url=jdbc:h2:mem:test
+  Means:
+  H2 database
+  in-memory
+  database name = test
+  lives only while app is running
+  So:
+  restart app → DB gone
+
+
+Why JdbcUserDetailsManager needs DataSource
+Earlier (in-memory)
+new InMemoryUserDetailsManager(...)
+Users stored in Java memory (RAM)
+→ lost on restart
+→ no DB
+Now (JDBC)
+new JdbcUserDetailsManager(dataSource)
+“Store users in a database, using JDBC, using this DataSource.”
+
+So:
+users go into DB tables
+Spring Security reads users from DB
+authentication is DB-backed
+
+Now your method — line by line
+- @Bean
+- public UserDetailsService userDetailsService(){
+
+
+You’re defining a UserDetailsService bean
+
+Spring Security will use this to:
+load users
+verify passwords
+check roles
+- UserDetails user1 = User.withUsername("user1")
+  Start building a user with username user1
+- .password("{noop}password1")
+  Password = password1
+  {noop} = no encoding (plain text)
+  Needed because Spring Security expects encoded passwords
+- .roles("USER")
+  Assigns role USER
+  Internally stored as ROLE_USER
+- .build();
+  Creates the UserDetails object
+
+
+- JdbcUserDetailsManager userDetailsManager = new JdbcUserDetailsManager(dataSource);
+  🔥 THIS IS THE KEY LINE
+
+What happens here:
+You create a JdbcUserDetailsManager
+You pass the DataSource
+
+This tells Spring Security:
+“Use this database to store & fetch users”
+
+Internally:
+Uses JDBC
+Uses SQL queries
+
+Uses tables like:
+users
+authorities
+***(Spring Security expects a default schema for this)***
+
+- userDetailsManager.createUser(user1);
+  Inserts user1 into DB
+
+Writes into:
+users table
+authorities table
+
+Equivalent SQL (conceptually):
+INSERT INTO users ...
+INSERT INTO authorities ...
+
+- return userDetailsManager;
+  You return a database-backed UserDetailsService
+
+Spring Security now:
+authenticates users from H2 DB
+not from memory
+***code***
+
+@PreAuthorize("hasRole('ADMIN')")
+@GetMapping("/admin")
+public String adminEndpoint(){
+return "Hello Admin";
+}
+
+**********
+
+@PreAuthorize("hasRole('ADMIN')")
+@GetMapping("/admin")
+public String adminEndpoint(){
+return "Hello Admin";
+}
+What @PreAuthorize("hasRole('ADMIN')") means
+Only an authenticated user who has the role ADMIN is allowed to execute this method.
+
+If the condition fails, the method is never called.
+
+
+- @EnableMethodSecurity
+  turns ON security checks at the method level.
+
+- URL security vs Method security (quick clarity)
+  Type	Example	Purpose
+  URL-level	http.authorizeHttpRequests()	Protects endpoints by path
+  Method-level	@PreAuthorize	Protects business logic
+
+
+- What is JWT?
+  A self-contained proof of authentication that the client sends with every request.
+  Instead of:server remembering you in a session
+
+    - without JWT :-
+      ***Traditional login (session-based)***
+      How your app works right now:
+      User logs in (form login / basic auth)
+      Server authenticates user
+      Server remembers user (or rechecks credentials)
+      Client sends request
+      Server checks authentication again
+      Even with STATELESS, you’re still sending username + password every time (Basic Auth).
+
+    -   ***JWT-based login (token-based)***
+        JWT flow:
+        User logs in with username + password
+        Server verifies credentials
+        Server generates a JWT
+        Server sends JWT to client
+        Client stores JWT (localStorage / memory)
+        Client sends JWT in every request:
+        Authorization: Bearer <jwt>
+        Server verifies token (signature + expiry)
+        Server allows/denies request
+        🚫 No session
+        🚫 No password sent again
+        ✅ Fully stateless
+
+    - What is inside a JWT?
+
+      A JWT has 3 parts:
+      header.payload.signature
+      Example (decoded)
+      {
+      "sub": "admin",
+      "roles": ["ROLE_ADMIN"],
+      "iat": 1700000000,
+      "exp": 1700003600
+      }
+      sub → username
+      roles → authorities
+      iat → issued at
+      exp → expiry time
+      The token is signed, so it can’t be tampered with.
+
+***FILES THAT WE WOULD NEED TO IMPLEMENT JWT IN OUR PROJECT***
+JwtUtils
+AuthTokenFilter
+AuthEntryPointJwt
+
+- JwtUtils
+  Contains utility methods for generating, parsing and validating jwts
+  Include generating a token from a username, validating a JWT and extracting the username from a token
+- AuthTokenFilter
+  Filters incoming requests to check for a valid JWT in the header,
+  setting the authentication context if the token is valid
+  Extracts JWT from request header, validates it and
+  configures the Spring Security context with user details if the token is valid
+- AuthEntryPointJwt
+  Provides Custom handling for unauthorized requests,
+  typically when authentication is required but not supplied or valid
+  when an unauthorized request is detected, it logs the error and returns a JSON
+  response with an error message, status code, and the path attempted
+
+
+***code***
+@Component
+public class JwtUtils {
+private static final Logger logger= LoggerFactory.getLogger(JwtUtils.class);
+
+    @Value("${spring.app.jwtExpirationMs}")
+    private int jwtExpirationMs;
+    @Value("${spring.app.jwtSecret}")
+    private String JwtSecret;
+    //getting JWT from Header
+    public String getJwtFromHeader(HttpServletRequest request){
+        String bearerToken= request.getHeader("Authorization");
+        logger.debug("Authorization header: {}",bearerToken);
+        if(bearerToken!=null && bearerToken.startsWith("Bearer ")){
+            return bearerToken.substring(7); //Remove Bearer prefix
+        }
+        return null;
+    }
+
+    //Generating Token from Username
+    public String generateTokenFromUsername(UserDetails userDetails){
+        String username= userDetails.getUsername();
+        return Jwts.builder()
+                .subject(username)
+                .issuedAt(new Date())
+                .expiration(new Date((new Date().getTime()+jwtExpirationMs)))
+                .signWith(key())
+                .compact();
+    }
+
+    //Getting Username from JWT Token
+    public String getUsernameFromJWTToken(String token){
+        return Jwts.parser()
+                .verifyWith((SecretKey) key())
+                .build().parseSignedClaims(token)
+                .getPayload().getSubject();
+    }
+    //Generate Signing Key
+    public Key key(){
+        return Keys.hmacShaKeyFor(
+                Decoders.BASE64.decode(JwtSecret)
+        );
+    }
+
+    // Validate JWT Token
+    public boolean validateJwtToken(String authToken){
+
+        try{
+            System.out.println("validate");
+            Jwts.parser()
+                    .verifyWith((SecretKey) key())
+                    .build()
+                    .parseSignedClaims(authToken);
+            return true;
+
+        }catch(MalformedJwtException exception){
+                logger.error("Invalid JWT token:{}", exception.getMessage());
+        }catch(ExpiredJwtException exception){
+            logger.error("JWT token is expired:{}", exception.getMessage());
+        }catch(UnsupportedJwtException exception){
+            logger.error("JWT token is not supported:{}", exception.getMessage());
+        }catch(IllegalArgumentException exception){
+            logger.error("JWT claims string is empty:{}", exception.getMessage());
+        }
+        return false;
+    }
+
+}
+**********
+
+# EXPLANATION OF ABOVE CODE
+
+
+- @Component
+    - public class JwtUtils {
+      @Component → Spring will:
+      create this class as a Spring bean
+      allow it to be injected using @Autowired
+      This makes JwtUtils available to filters, services, etc.
+
+
+- private static final Logger logger = LoggerFactory.getLogger(JwtUtils.class);
+  Creates a logger for this class
+  Used to log debug and error messages
+  Better than System.out.println() for production code
+
+Reading values from application.properties
+
+- @Value("${spring.app.jwtExpirationMs}")
+    - private int jwtExpirationMs;
+      Injects value from:
+      properties
+      spring.app.jwtExpirationMs=600000000000
+      This value represents token validity duration (milliseconds)
+
+
+
+
+- @Value("${spring.app.jwtSecret}")
+    - private String JwtSecret;
+      Injects your secret key from:
+      spring.app.jwtSecret=mySecretKey!#912738
+      This secret is used to:
+      sign the JWT
+      verify its integrity
+
+
+- public String getJwtFromHeader(HttpServletRequest request){
+  This method extracts the JWT from the HTTP request
+  Called typically inside a JWT authentication filter
+
+
+- String bearerToken = request.getHeader("Authorization");
+  Reads the Authorization HTTP header
+  Example header:
+  Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
+
+- logger.debug("Authorization header: {}", bearerToken);
+  Logs the header value (only visible if debug logging enabled)
+  Useful for debugging missing or malformed tokens
+
+
+- if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
+  Checks:
+  header exists
+  uses Bearer scheme
+
+- return bearerToken.substring(7);
+  "Bearer " = 7 characters
+  Removes "Bearer " prefix
+  Returns only the JWT
+
+
+- return null;
+  If header missing or malformed → no token present
+  Generating JWT from user details
+
+- public String generateTokenFromUsername(UserDetails userDetails){
+  Generates a JWT after successful authentication
+  UserDetails contains:
+  username
+  roles
+  account status
+
+
+- String username = userDetails.getUsername();
+  Extracts username
+  This will be stored inside JWT as the subject
+
+
+- return Jwts.builder()
+  Starts building a JWT using jjwt library
+
+
+.subject(username)
+Sets sub (subject) claim
+This identifies who the token belongs to
+
+
+- .issuedAt(new Date())
+  Sets iat claim
+  Token creation time
+
+
+- .expiration(new Date((new Date().getTime() + jwtExpirationMs)))
+  Sets exp claim
+  Token expiry time = current time + configured duration
+
+
+- .signWith(key())
+  Signs the JWT using HMAC key
+  Ensures:
+  token cannot be modified
+  token authenticity can be verified
+
+
+- .compact();
+  Builds and serializes JWT into a string
+  This string is what you send to the client
+  Reading username from JWT
+
+    - public String getUsernameFromJWTToken(String token){
+      Extracts username from JWT
+      Used during request authentication
+
+
+- return Jwts.parser()
+  Starts JWT parser
+
+
+- .verifyWith((SecretKey) key())
+  Verifies JWT signature using the same secret key
+  If signature invalid → exception thrown
+
+
+- .build()
+- .parseSignedClaims(token)
+  Parses and validates token
+  Ensures:
+  token not tampered
+  signature valid
+  not expired (unless caught elsewhere)
+
+
+.getPayload().getSubject();
+Extracts sub claim
+Returns the username
+
+- public Key key(){
+  Creates the cryptographic key used to:
+  sign JWT
+  verify JWT
+
+
+- return Keys.hmacShaKeyFor(Decoders.BASE64.decode(JwtSecret));
+  What this is trying to do
+  Decode secret from Base64
+  Create HMAC-SHA key
+
+🚨 PROBLEM HERE (important)
+Your secret:
+properties
+spring.app.jwtSecret=mySecretKey!#912738
+This is NOT Base64-encoded, so:
+Decoders.BASE64.decode() will throw errors
+OR produce invalid key
+✅ Correct options
+Option 1 (recommended): remove Base64 decoding
+return Keys.hmacShaKeyFor(JwtSecret.getBytes());
+Option 2: Base64-encode secret in properties
+properties
+spring.app.jwtSecret=bXlTZWNyZXRLZXkhIzkxMjczOA==
+
+- public boolean validateJwtToken(String authToken){
+  Checks whether JWT is:
+  well-formed
+  signed correctly
+  not expired
+  supported
+
+
+- try {
+- System.out.println("validate");
+  Debug print (can be removed later)
+
+
+- Jwts.parser()
+- .verifyWith((SecretKey) key())
+- .build()
+- .parseSignedClaims(authToken);
+  Parses and validates JWT
+  If any problem occurs → exception thrown
+  return true;
+  Token is valid
+
+- Exception handling (very important)
+
+  catch (MalformedJwtException exception) {
+  Token structure is invalid
+  catch (ExpiredJwtException exception) {
+  Token is expired (exp exceeded)
+  catch (UnsupportedJwtException exception) {
+  Token type/algorithm not supported
+  catch (IllegalArgumentException exception) {
+  Token is empty or null
+  return false;
+  Token validation failed
+
+
+
+
+
+*****AuthTokenFilter code*****
+
+@Component
+public class AuthTokenFilter extends OncePerRequestFilter {
+
+    @Autowired
+    private JwtUtils jwtUtils;
+
+    @Autowired
+    private UserDetailsService userDetailsService;
+
+    private static final Logger logger= LoggerFactory.getLogger(AuthTokenFilter.class);
+
+    @Override
+    protected void doFilterInternal(HttpServletRequest request,
+                                    HttpServletResponse response,
+                                    FilterChain filterChain)
+            throws ServletException, IOException {
+
+        logger.debug("AuthTokenFilter called for URI:{}", request.getRequestURI());
+        try{
+                String jwt=parseJwt(request);
+                if(jwt != null && jwtUtils.validateJwtToken(jwt)){
+                    String username=jwtUtils.getUsernameFromJWTToken(jwt);
+                    UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                    UsernamePasswordAuthenticationToken authentication=new UsernamePasswordAuthenticationToken(
+                            userDetails,null,userDetails.getAuthorities()
+                    );
+                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                    logger.debug("Roles from jwt : {}",userDetails.getAuthorities());
+                }
+        }catch(Exception e){
+            logger.error("cannot set user authentication:{}", e);
+        }
+        filterChain.doFilter(request,response);
+
+    }
+
+    private String parseJwt(HttpServletRequest request) {
+
+        String jwt=jwtUtils.getJwtFromHeader(request);
+
+        logger.debug("AuthTokenFilter.java: {}",jwt);
+        return jwt;
+    }
+}
+
+****************************
+
+
+- @Component
+- public class AuthTokenFilter extends OncePerRequestFilter {
+  @Component → Spring creates this filter as a bean, so it can be injected/used in the security configuration.
+  extends OncePerRequestFilter → guarantees this filter runs once per HTTP request (prevents double execution in the same request).
+
+- Dependencies injected
+  @Autowired
+  private JwtUtils jwtUtils;
+  Injects your JwtUtils bean.
+  @Autowired
+  private UserDetailsService userDetailsService;
+  Injects the UserDetailsService bean.
+  Used to load user info (roles/authorities/password flags) from DB or memory using:
+
+    - private static final Logger logger = LoggerFactory.getLogger(AuthTokenFilter.class);
+      Standard logger for debug + error messages.
+      Main filter method
+
+- @Override
+- protected void doFilterInternal(HttpServletRequest request,
+- HttpServletResponse response,
+- FilterChain filterChain)
+- throws ServletException, IOException {
+  This is the method Spring calls for every request.
+  Parameters:
+  request: incoming HTTP request
+  response: outgoing HTTP response
+  filterChain: lets you pass control to the next filter/controller
+
+
+- logger.debug("AuthTokenFilter called for URI:{}", request.getRequestURI());
+  Logs which endpoint is being called.
+  Useful to confirm this filter is running.
+
+
+- try{
+- String jwt = parseJwt(request);
+  Wrap everything inside try-catch to avoid breaking request flow.
+  parseJwt(request) fetches the JWT from the Authorization header using JwtUtils.
+
+
+- if(jwt != null && jwtUtils.validateJwtToken(jwt)){
+  Checks two things:
+  JWT exists in header
+  JWT is valid (signature ok, not expired, properly formed)
+  If either fails → no authentication is set, request continues as anonymous.
+
+
+- String username = jwtUtils.getUsernameFromJWTToken(jwt);
+  Extracts username from JWT sub claim.
+  Now you know “who is this request claiming to be?”
+
+
+- UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+  Loads full user details from DB (or in-memory) by username.
+  Why needed even though JWT has username?
+  because Spring needs authorities (roles)
+  and account flags (enabled, locked, etc.)
+  and optionally you can re-check user still exists
+
+
+- UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+  This creates a Spring Security Authentication object.
+  Inside it:
+  principal = userDetails (the logged-in user object)
+  credentials = null (because we don’t store password here; JWT already proved identity)
+  authorities = roles/permissions (like ROLE_ADMIN)
+  This object tells Spring:
+  “This request is authenticated as this user with these roles.”
+
+
+- authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+  Adds request-specific metadata into the Authentication object.
+  Example info stored:
+  client IP address
+  session id (if any)
+  Mainly useful for auditing/logging.
+
+
+- SecurityContextHolder.getContext().setAuthentication(authentication);
+  🔥 Most important line in the entire filter.
+  Spring Security stores the current user in a thread-local “security context”.
+  After this line, Spring treats the request as logged in.
+  Then:
+  @PreAuthorize works
+  hasRole('ADMIN') works
+  SecurityContextHolder.getContext().getAuthentication() returns this user
+  Without this line → even with a valid JWT, Spring thinks user is anonymous.
+
+
+logger.debug("Roles from jwt : {}", userDetails.getAuthorities());
+Logs the authorities loaded for the user.
+
+Slight wording: roles are not “from jwt” here — you loaded them via UserDetailsService, not directly from token.
+But debug-wise, it helps confirm the correct roles are applied.
+
+
+- }catch(Exception e){
+- logger.error("cannot set user authentication:{}", e);
+- }
+  If anything goes wrong (bad token, DB issue, casting, etc.):
+  logs the error
+  does NOT kill the request pipeline
+  Result: request continues as unauthenticated.
+
+Continue the chain
+- filterChain.doFilter(request,response);
+  Passes control to the next filter.
+  Eventually reaches controller.
+  This must be called, otherwise requests will hang.
+
+
+- private String parseJwt(HttpServletRequest request) {
+  Private helper to extract JWT from request.
+
+
+- String jwt = jwtUtils.getJwtFromHeader(request);
+  Calls your earlier method:
+  reads Authorization header
+  checks Bearer
+  returns token string or null
+
+
+- logger.debug("AuthTokenFilter.java: {}", jwt);
+- return jwt;
+
+*******AuthEntryPoint code*******
+
+@Component
+public class AuthEntryPointJwt implements AuthenticationEntryPoint {
+
+    private static final Logger logger= LoggerFactory.getLogger(AuthEntryPointJwt.class);
+    @Override
+    public void commence(HttpServletRequest request,
+                         HttpServletResponse response,
+                         AuthenticationException authException)
+            throws IOException, ServletException {
+
+        logger.error("Unauthorized error: {}", authException.getMessage());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        final Map<String, Object> body= new HashMap<>();
+        body.put("status",HttpServletResponse.SC_UNAUTHORIZED);
+        body.put("error","unauthorized");
+        body.put("message",authException.getMessage());
+        body.put("path",request.getServletPath());
+
+        final ObjectMapper mapper= new ObjectMapper();
+        mapper.writeValue(response.getOutputStream(), body);
+    }
+}
+
+***************************************
+
+
+# EXPLANATION FOR ABOVE CODE
+
+- @Component
+    - public class AuthEntryPointJwt implements AuthenticationEntryPoint {
+      @Component
+      Registers this class as a Spring bean
+      Allows Spring Security to inject and use it in SecurityConfig
+      implements AuthenticationEntryPoint
+      This interface defines what happens when an unauthenticated user tries to access a protected resource
+      In JWT apps, this replaces:
+      redirect to login page ❌
+      with JSON error response ✅
+
+
+- private static final Logger logger = LoggerFactory.getLogger(AuthEntryPointJwt.class);
+  Used to log authentication errors
+  Helpful for debugging invalid/missing JWTs
+
+
+- @Override
+- public void commence(HttpServletRequest request, HttpServletResponse response, AuthenticationException authException)throws IOException, ServletException {
+  This method is automatically called by Spring Security when:
+  User is not authenticated
+  AND tries to access a secured endpoint
+  OR JWT is missing / invalid / expired
+  You never call this method manually.
+
+
+- logger.error("Unauthorized error: {}", authException.getMessage());
+  Logs the reason authentication failed
+  Examples:
+  “JWT expired”
+  “Full authentication is required”
+  “Bad credentials”
+  Set response type
+
+    - response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+      Sets response Content-Type to:
+      application/json
+      Important for REST APIs (clients expect JSON, not HTML)
+
+
+- response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+  Sets HTTP status code to 401
+  Meaning:
+  “You are not authenticated”
+  ⚠️ Difference worth knowing:
+  401 Unauthorized → not authenticated
+  403 Forbidden → authenticated but not allowed
+  Build response body
+
+- final Map<String, Object> body = new HashMap<>();
+  Creates a map to hold JSON response data
+
+
+- body.put("status", HttpServletResponse.SC_UNAUTHORIZED);
+  Adds status code: 401
+
+
+- body.put("error", "unauthorized");
+  Human-readable error type
+
+
+- body.put("message", authException.getMessage());
+  Actual reason authentication failed
+
+Example:
+“Full authentication is required to access this resource”
+
+
+- body.put("path", request.getServletPath());
+  Adds the endpoint path that was accessed
+  Helps client understand which API failed
+
+- final ObjectMapper mapper = new ObjectMapper();
+  Jackson ObjectMapper converts Java objects to JSON
+
+
+- mapper.writeValue(response.getOutputStream(), body);
+  Writes the body map as JSON directly to HTTP response
+
+        Output example:
+        {
+        "status": 401,
+        "error": "unauthorized",
+        "message": "Full authentication is required to access this resource",
+        "path": "/api/admin"
+        }
+
+
+**************************************************************************************************************************************************************
