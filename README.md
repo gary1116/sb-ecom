@@ -2258,3 +2258,143 @@ Example:
 
 
 **************************************************************************************************************************************************************
+
+
+# Added User, Address, Role Model and explanation of relationships below
+
+User ↔ Role = Many-to-Many
+User ↔ Address = Many-to-Many
+User → Product and Product → User = One-to-Many / Many-to-One (seller relationship)
+
+I’ll explain each relationship + the new annotations you used.
+
+1) User ↔ Role — Many-to-Many
+   In User
+   @ManyToMany(cascade = {PERSIST, MERGE}, fetch = EAGER)
+   @JoinTable(
+   name="user_role",
+   joinColumns = @JoinColumn(name = "user_id"),
+   inverseJoinColumns = @JoinColumn(name = "role_id")
+   )
+   private Set<Role> roles = new HashSet<>();
+
+Meaning
+One user can have many roles (ADMIN, USER, etc.)
+One role can belong to many users
+How DB stores it
+Because many-to-many can’t be stored in a single column, JPA creates a join table:
+user_role
+user_id (FK → users.user_id)
+role_id (FK → roles.role_id)
+
+So if Gary has ADMIN + USER, you get 2 rows in user_role.
+Why Set<Role>
+Avoids duplicate roles for a user automatically.
+- fetch = FetchType.EAGER
+When you load a User, it also loads roles immediately.
+Useful for auth/login flows, but can become heavy if used everywhere.
+cascade = PERSIST, MERGE
+If you save a new User, it can also persist/merge the linked Role entities.
+Important: In real apps, Roles are usually pre-created and you typically avoid cascading to roles to prevent accidental role creation.
+
+2) User ↔ Address — Many-to-Many (bidirectional)
+   In User (owning side)
+   @ManyToMany(cascade = {PERSIST, MERGE})
+   @JoinTable(
+   name="user_addresses",
+   joinColumns = @JoinColumn(name="user_id"),
+   inverseJoinColumns = @JoinColumn(name = "address_id")
+   )
+   private List<Address> addresses = new ArrayList<>();
+
+In Address (inverse side)
+@ManyToMany(mappedBy = "addresses")
+private List<User> users = new ArrayList<>();
+
+Meaning
+A user can have multiple addresses
+The same address can be linked to multiple users
+(example: family members share one home address)
+Owning vs inverse side
+The side with @JoinTable is the owning side → User
+The side with mappedBy is the inverse side → Address
+Only the owning side updates the join table.
+Join table created
+
+user_addresses
+user_id
+address_id
+
+Why mappedBy = "addresses"
+It means:
+“Don’t create another join table from Address side. The relationship is already defined by the addresses field in User.”
+
+3) User ↔ Product — One-to-Many / Many-to-One (seller owns products)
+   In Product
+   @ManyToOne
+   @JoinColumn(name="seller_id")
+   private User user;
+
+In User
+@OneToMany(
+mappedBy = "user",
+cascade = {PERSIST, MERGE},
+orphanRemoval = true
+)
+private Set<Product> products;
+
+Meaning
+One user (seller) can sell many products
+Each product has exactly one seller
+
+    How DB stores it
+    This is NOT a join table.
+    Instead, the products table will have a column:
+    seller_id (FK → users.user_id)
+    So many products can point to the same user via seller_id.
+    mappedBy = "user"
+
+This means:
+
+“User is NOT the owner of the relationship in DB. Product is the owner because it has the foreign key column (seller_id).”
+
+So Product.user is the owning side.
+
+- orphanRemoval = true (important)
+This means:
+    If a product is removed from user.products, JPA will delete that product row from the DB.
+    Example:
+    user.getProducts().remove(p1);
+    → JPA can delete p1 from DB (if the entity is managed and transaction is correct).
+    ⚠️ In many ecommerce apps, you may not want to physically delete products (you might “soft delete” instead).
+
+New annotations you used
+- @Table(uniqueConstraints = …)
+- @Table(name = "users",
+- uniqueConstraints = {
+- @UniqueConstraint(columnNames = "username"),
+- @UniqueConstraint(columnNames = "email")
+- })
+    Adds DB-level uniqueness:
+    two users cannot share same username
+    two users cannot share same email
+    Even if validation is bypassed, DB enforces it.
+
+- @Enumerated(EnumType.STRING)
+- private AppRole roleName;
+    Stores enum as text:
+    ✅ ADMIN, USER (safe)
+    instead of
+    ❌ 0, 1 (dangerous if you reorder enum values)
+
+- Lombok: @ToString.Exclude
+You used it to prevent infinite recursion / huge logs.
+Example:
+User → addresses → users → addresses → users … (loop)
+So you exclude the back-reference fields from toString().
+
+- Quick relationship map (easy mental model)
+    User * ↔ * Role via user_role
+    User * ↔ * Address via user_addresses
+    User 1 → * Product (seller) via products.seller_id
+    Category 1 → * Product via products.category_id (from your earlier code)
