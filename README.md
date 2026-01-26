@@ -2398,3 +2398,11 @@ So you exclude the back-reference fields from toString().
     User * ↔ * Address via user_addresses
     User 1 → * Product (seller) via products.seller_id
     Category 1 → * Product via products.category_id (from your earlier code)
+
+# SECURITY
+
+check this section ***Spring security miniproject learning part for spring security related code***
+for explanation of below files  
+JwtUtils
+AuthTokenFilter
+AuthEntryPointJwt
