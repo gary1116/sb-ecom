@@ -2674,3 +2674,264 @@ From this point onward:
 Spring Security compares passwords
 checks authorities
 decides whether authentication succeeds
+
+
+- WebSecurityConfig class
+************CODE************
+
+@Configuration
+@EnableWebSecurity
+public class WebSecurityConfig {
+
+    @Autowired
+    UserDetailsServiceImpl userDetailsService;
+
+    @Autowired
+    private AuthEntryPointJwt unAuthorizedHandler;
+
+    @Bean
+    public AuthTokenFilter authenticationJwtTokenFilter(){
+        return new AuthTokenFilter();
+    }
+
+    @Bean
+    public DaoAuthenticationProvider authenticationProvider(){
+        DaoAuthenticationProvider authenticationProvider= new DaoAuthenticationProvider(userDetailsService);
+        authenticationProvider.setPasswordEncoder(passwordEncoder());
+        return authenticationProvider;
+    }
+
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig){
+        return authConfig.getAuthenticationManager();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder(){
+        return new BCryptPasswordEncoder();
+    }
+
+
+    @Bean
+    SecurityFilterChain filterChain(HttpSecurity http) throws Exception{
+        http.csrf(csrf->csrf.disable())
+                .exceptionHandling(exception->exception.authenticationEntryPoint(unAuthorizedHandler))
+                .sessionManagement(session->session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests((requests)->requests.
+                requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/v3/api-docs/**").permitAll()
+                        .requestMatchers("/swagger-ui/**").permitAll()
+                        .requestMatchers("/api/public/**").permitAll()
+                        .requestMatchers("/api/admin/**").permitAll()
+                        .requestMatchers("/api/test/**").permitAll()
+                        .requestMatchers("/images/**").permitAll()
+                        .anyRequest().authenticated());
+        http.authenticationProvider(authenticationProvider());
+        http.headers(headers->
+                headers.frameOptions(frameOptionsConfig ->
+                        frameOptionsConfig.sameOrigin()));
+        http.addFilterBefore(authenticationJwtTokenFilter(),
+                UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+
+
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer(){
+        return (web-> web.ignoring().requestMatchers(
+                "/v2/api-docs",
+                "configuration/ui",
+                "/swagger-resources/**",
+                "/configuration/security",
+                "/swagger-ui.html",
+                "/webjars/**"
+        ));
+    }
+}
+****************************
+
+
+- *****EXPLANATION*****
+@Configuration
+Marks this class as a Spring configuration class.
+Spring will scan it and execute the @Bean methods to register objects into the Spring container.
+
+@EnableWebSecurity
+Enables Spring Security’s web security support.
+Without this, your custom security config may not be applied.
+
+Dependencies injected
+@Autowired
+UserDetailsServiceImpl userDetailsService;
+Spring injects your custom UserDetailsServiceImpl, which loads users from DB during authentication.
+
+@Autowired
+private AuthEntryPointJwt unAuthorizedHandler;
+Injects your custom AuthEntryPointJwt.
+This is used when:
+a user accesses a protected endpoint
+but is not authenticated / token is missing or invalid
+Spring uses this entry point to return a proper 401 Unauthorized response.
+
+Beans in this class
+1) JWT Filter Bean
+   @Bean
+   public AuthTokenFilter authenticationJwtTokenFilter() {
+   return new AuthTokenFilter();
+   }
+Creates a Spring-managed bean of your JWT filter.
+This filter runs on every request and typically:
+reads the Authorization: Bearer <token> header
+validates JWT
+if valid → sets authentication in Spring Security context
+
+2) Authentication Provider Bean
+   @Bean
+   public DaoAuthenticationProvider authenticationProvider() {
+   DaoAuthenticationProvider authenticationProvider =
+   new DaoAuthenticationProvider(userDetailsService);
+   authenticationProvider.setPasswordEncoder(passwordEncoder());
+   return authenticationProvider;
+   }
+
+What is DaoAuthenticationProvider?
+
+It is Spring Security’s standard provider that authenticates users using:
+a UserDetailsService (to load user details)
+a PasswordEncoder (to compare passwords)
+Why pass userDetailsService in constructor?
+In newer Spring Security versions, the UserDetailsService is set via constructor.
+Why set password encoder?
+Because DB stores password as a hashed string (bcrypt).
+So Spring must compare raw password with hashed password using BCryptPasswordEncoder.
+
+3) AuthenticationManager (Important)
+   public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) {
+   return authConfig.getAuthenticationManager();
+   }
+
+Otherwise it won’t be registered as a Spring bean and you can’t inject it elsewhere.
+
+4) Password Encoder Bean
+   @Bean
+   public PasswordEncoder passwordEncoder() {
+   return new BCryptPasswordEncoder();
+   }
+
+
+Creates a PasswordEncoder bean.
+BCrypt is used because:
+it is one-way hashing (cannot be reversed)
+it includes salt
+it is a recommended secure hashing mechanism
+
+SecurityFilterChain (Main Security Rules)
+- @Bean
+- SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+This is the most important configuration method in Spring Security 6+.
+Instead of extending WebSecurityConfigurerAdapter (old style), we define a SecurityFilterChain bean.
+
+Disable CSRF
+- http.csrf(csrf -> csrf.disable())
+CSRF protection is mainly needed for browser-based session apps.
+In a stateless JWT REST API, we commonly disable it because:
+we are not using server sessions
+JWT is sent in headers, not cookies (typical case)
+
+Configure exception handling
+- .exceptionHandling(exception ->
+- exception.authenticationEntryPoint(unAuthorizedHandler))
+If an unauthenticated user hits a protected endpoint,
+Spring uses AuthEntryPointJwt to return the response (usually 401).
+
+Make app stateless (JWT)
+- .sessionManagement(session ->
+- session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+This tells Spring:
+do NOT create sessions
+do NOT store logged-in state on server
+each request must carry its own authentication (JWT)
+
+Authorization Rules (which endpoints are public)
+- .authorizeHttpRequests((requests) -> requests
+- .requestMatchers("/api/auth/**").permitAll()
+- .requestMatchers("/v3/api-docs/**").permitAll()
+- .requestMatchers("/swagger-ui/**").permitAll()
+- .requestMatchers("/api/public/**").permitAll()
+- .requestMatchers("/api/admin/**").permitAll()
+- .requestMatchers("/api/test/**").permitAll()
+- .requestMatchers("/images/**").permitAll()
+- .anyRequest().authenticated()
+- );
+
+
+Meaning:
+These paths are accessible without login (permitAll())
+Any other request must be authenticated (authenticated())
+
+⚠️ Note: You currently permit /api/admin/** for everyone.
+Usually admin endpoints should be restricted using roles, e.g.
+
+- .requestMatchers("/api/admin/**").hasRole("ADMIN")
+
+Register authentication provider
+- http.authenticationProvider(authenticationProvider());
+
+
+This tells Spring Security to use your configured DaoAuthenticationProvider
+(which uses DB users + bcrypt) for authentication.
+
+Allow H2 console / frames (if needed)
+- http.headers(headers ->
+- headers.frameOptions(frameOptionsConfig ->
+- frameOptionsConfig.sameOrigin()));
+
+
+Browsers block frames by default for security.
+H2 console uses frames, so we allow frames from the same origin.
+
+Add JWT filter into filter chain
+- http.addFilterBefore(authenticationJwtTokenFilter(),
+- UsernamePasswordAuthenticationFilter.class);
+This inserts your JWT filter before the normal username/password auth filter.
+Meaning:
+JWT will be checked early
+if token is valid, user becomes authenticated before reaching controllers
+
+Build SecurityFilterChain
+- return http.build();
+Finalizes and returns the security configuration.
+
+- WebSecurityCustomizer (Ignore paths completely)
+@Bean
+public WebSecurityCustomizer webSecurityCustomizer() {
+return (web -> web.ignoring().requestMatchers(
+"/v2/api-docs",
+"configuration/ui",
+"/swagger-resources/**",
+"/configuration/security",
+"/swagger-ui.html",
+"/webjars/**"
+));
+}
+
+This tells Spring Security to completely ignore these paths.
+Ignored paths are not even processed by the security filter chain.
+This is typically used for:
+Swagger static resources
+documentation endpoints
+****************************
+Why create multiple @Beans instead of normal methods?
+In Spring, @Bean methods are not “just methods”.
+They register objects into the Spring container so that:
+✅ Spring can inject them using @Autowired
+✅ Spring creates only one instance (singleton by default)
+✅ Spring manages their lifecycle
+✅ Other configurations can reuse them
+✅ Security infrastructure expects beans of specific types (like SecurityFilterChain, PasswordEncoder, etc.)
+If these were plain methods without @Bean:
+Spring would NOT manage them
+you could not reliably inject them across the app
+Spring Security would not automatically pick them up
+*********************************
+
+
