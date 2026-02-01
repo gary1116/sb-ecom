@@ -2406,3 +2406,271 @@ for explanation of below files
 JwtUtils
 AuthTokenFilter
 AuthEntryPointJwt
+
+- UserDetailsImpl
+**********CODE**********
+  @NoArgsConstructor
+  @Data
+  public class UserDetailsImpl implements UserDetails {
+
+  private static final long serialVersionUID=1L;
+
+  private Long id;
+  private String username;
+  private String email;
+
+  @JsonIgnore
+  private String password;
+
+  private Collection<? extends GrantedAuthority> authorities;
+
+  public static UserDetailsImpl build(User user){
+
+        List<GrantedAuthority> authorities= user.getRoles().stream()
+                .map(role-> new SimpleGrantedAuthority(role.getRoleName().name()))
+                .collect(Collectors.toList());
+
+        return new UserDetailsImpl(
+                user.getUserId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getPassword(),
+                authorities
+
+        );
+  }
+
+
+    public UserDetailsImpl(Long id, String username, String email, String password, Collection<? extends GrantedAuthority> authority) {
+        this.id = id;
+        this.username = username;
+        this.email = email;
+        this.password = password;
+        this.authorities = authority;
+    }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return authorities;
+    }
+
+    @Override
+    public @Nullable String getPassword() {
+        return password;
+    }
+
+    @Override
+    public String getUsername() {
+        return username;
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return UserDetails.super.isEnabled();
+    }
+
+    @Override
+    public boolean equals(Object o){
+        if(this==o)
+            return true;
+        if(o==null || getClass() != o.getClass())
+            return false;
+        UserDetailsImpl user = (UserDetailsImpl)  o;
+        return Objects.equals(id, user.id);
+    }
+}
+************************
+
+- EXPLANATION
+
+- @NoArgsConstructor
+Lombok generates a no-argument constructor.
+This is useful for frameworks, serialization, and general object creation.
+
+- @Data
+Lombok generates:
+getters and setters
+toString()
+equals() and hashCode()
+(We still override equals() manually.)
+
+- implements UserDetails
+This makes the class compatible with Spring Security.
+Spring Security will call methods like:
+getUsername()
+getPassword()
+getAuthorities()
+account-status methods (isAccountNonLocked(), etc.)
+
+- Serializable Identifier
+private static final long serialVersionUID = 1L;
+Used for Java serialization compatibility.
+Commonly added in UserDetails implementations.
+
+- Core User Fields
+private Long id;
+private String username;
+private String email;
+These fields store authenticated user information:
+id → useful for JWT claims, auditing, and identifying the user internally
+username → used by Spring Security for authentication
+email → extra user information
+
+- @JsonIgnore
+Prevents the password from being included in JSON responses.
+This avoids accidental password leakage in APIs.
+
+- Authorities (Roles / Permissions)
+- private Collection<? extends GrantedAuthority> authorities;
+Spring Security uses authorities to perform authorization checks.
+GrantedAuthority is used in expressions like:
+hasRole("ADMIN")
+hasAuthority("ADMIN")
+
+Static Factory Method: build(User user)
+- public static UserDetailsImpl build(User user)
+This method converts our database User entity into a UserDetailsImpl.
+
+- List<GrantedAuthority> authorities = user.getRoles().stream()
+- .map(role -> new SimpleGrantedAuthority(role.getRoleName().name()))
+- .collect(Collectors.toList());
+What this does:
+Retrieves roles from the database (e.g. ADMIN, USER)
+Converts each role into a GrantedAuthority
+Collects them into a list
+
+Example:
+Role enum ADMIN → authority "ADMIN"
+(If using hasRole("ADMIN"), you may need "ROLE_ADMIN" depending on configuration.)
+
+- return new UserDetailsImpl(
+- user.getUserId(),
+- user.getUsername(),
+- user.getEmail(),
+- user.getPassword(),
+- authorities
+- );
+
+
+Creates and returns a fully populated UserDetailsImpl object using DB values.
+Constructor
+- public UserDetailsImpl(Long id, String username, String email,
+- String password,
+- Collection<? extends GrantedAuthority> authority)
+Initializes all fields required by Spring Security.
+
+Required UserDetails Methods
+@Override
+public Collection<? extends GrantedAuthority> getAuthorities() {
+return authorities;
+}
+Spring Security uses this to determine the user’s roles/permissions.
+the rest are getters/setters
+
+
+- UserDetailsServiceImpl
+  **********CODE**********
+
+@Service
+public class UserDetailsServiceImpl implements UserDetailsService {
+
+    @Autowired
+    UserRepository userRepository;
+
+    @Override
+    @Transactional
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(()->
+                        new UsernameNotFoundException("Username not found with username:- "+username));
+        return UserDetailsImpl.build(user);
+    }
+}
+
+  ************************
+
+- @Service
+Marks this class as a Spring-managed bean.
+Spring automatically detects and registers it in the application context.
+Spring Security requires a UserDetailsService bean to perform authentication, so this annotation is mandatory.
+
+- implements UserDetailsService
+This interface is used by Spring Security during login.
+Spring Security will automatically call:
+loadUserByUsername(String username)
+when a user attempts to authenticate.
+
+Repository Injection
+- @Autowired
+- UserRepository userRepository;
+
+Spring injects UserRepository so we can:
+query the database
+fetch user information using JPA
+This repository is responsible for interacting with the users table.
+
+Core Authentication Method
+- @Override
+- @Transactional
+- public UserDetails loadUserByUsername(String username)
+- throws UsernameNotFoundException
+This is the most important method in the class.
+loadUserByUsername(String username)
+Spring Security calls this method automatically during authentication.
+What Spring passes:
+
+username → value entered by the user during login
+
+What Spring expects back:
+a UserDetails object if user exists
+an exception if user does not exist
+
+@Transactional
+Ensures that the database session remains open while the user is being loaded.
+This is important because:
+User has relationships (e.g. roles)
+Hibernate may lazily fetch roles
+without a transaction, a LazyInitializationException could occur
+So this annotation guarantees safe data loading.
+
+Fetching User from Database
+- User user = userRepository.findByUsername(username)
+Queries the database for a user with the given username.
+The method returns:
+Optional<User>
+Handling User Not Found
+.orElseThrow(() ->
+new UsernameNotFoundException(
+"Username not found with username:- " + username
+)
+);
+
+If no user is found:
+throws UsernameNotFoundException
+Spring Security catches this exception
+authentication fails automatically
+This is the correct and expected behavior for Spring Security.
+Converting User → UserDetails
+return UserDetailsImpl.build(user);
+Converts the JPA User entity into a UserDetailsImpl
+Adds roles as GrantedAuthority
+Returns the object Spring Security understands
+From this point onward:
+Spring Security compares passwords
+checks authorities
+decides whether authentication succeeds
