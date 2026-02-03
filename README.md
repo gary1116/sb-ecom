@@ -3037,3 +3037,354 @@ Spring Security would not automatically pick them up
 ***************************************************************************************************
 
 
+*************AUTHCONTROLLER CODE*************
+
+@RestController
+@RequestMapping("api/auth")
+public class AuthController {
+
+    @Autowired
+    private AuthenticationManager authenticationManager;
+
+    @Autowired
+    private JwtUtils jwtUtils;
+
+    @Autowired
+    UserRepository userRepository;
+
+    @Autowired
+    PasswordEncoder encoder;
+
+    @Autowired
+    RoleRepository roleRepository;
+
+
+    @PostMapping("/signin")
+    public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest){
+
+        Authentication authentication;
+        try{
+            authentication= authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            loginRequest.getUsername(),
+                            loginRequest.getPassword()
+                    )
+            );
+        }catch (ArithmeticException e){
+            Map<String, Object> map= new HashMap<>();
+            map.put("message","Bad credentials");
+            map.put("status", false);
+            return new ResponseEntity<Object>(map, HttpStatus.NOT_FOUND);
+        }
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetailsImpl userDetails= (UserDetailsImpl) authentication.getPrincipal();
+        ResponseCookie jwtCookie=jwtUtils.generateJwtCookie(userDetails);
+        List<String> roles= userDetails
+                .getAuthorities()
+                .stream()
+                .map(item->item.getAuthority())
+                .collect(Collectors.toList());
+        UserInfoResponse userInfoResponse= new UserInfoResponse(userDetails.getId(),userDetails.getUsername(),roles);
+        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE
+        ,jwtCookie.toString()).body(userInfoResponse);
+    }
+
+    @PostMapping("/signup")
+    public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signupRequest){
+
+        if(userRepository.existsByUsername(signupRequest.getUsername())){
+            return ResponseEntity.badRequest().body(new MessageResponse("ERROR: Username is already Taken!"));
+        }
+        if(userRepository.existsByEmail(signupRequest.getEmail())){
+            return ResponseEntity.badRequest().body(new MessageResponse("ERROR: Email is already Taken!"));
+        }
+
+        User user= new User(
+                signupRequest.getUsername(),
+                signupRequest.getEmail(),
+                encoder.encode(signupRequest.getPassword())
+        );
+
+        Set<String> setRoles= signupRequest.getRole();
+        Set<Role> roles= new HashSet<>();
+
+        if(setRoles==null){
+            Role userRole=roleRepository.findByRoleName(AppRole.ROLE_USER)
+                    .orElseThrow(()-> new RuntimeException("Role not found"));
+            roles.add(userRole);
+        }else{
+            //admin-->ROLE_ADMIN
+            //seller->ROLE_SELLER
+            setRoles.forEach(role->{
+                switch (role){
+                    case "admin":
+                        Role adminRole=roleRepository.findByRoleName(AppRole.ROLE_ADMIN)
+                                .orElseThrow(()-> new RuntimeException("Role not found"));
+                        roles.add(adminRole);
+                        break;
+                    case "seller":
+                        Role sellerRole=roleRepository.findByRoleName(AppRole.ROLE_SELLER)
+                                .orElseThrow(()-> new RuntimeException("Role not found"));
+                        roles.add(sellerRole);
+                        break;
+                    default:
+                        Role userRole=roleRepository.findByRoleName(AppRole.ROLE_USER)
+                                .orElseThrow(()-> new RuntimeException("Role not found"));
+                        roles.add(userRole);
+                }
+            });
+
+        }
+        user.setRoles(roles);
+        userRepository.save(user);
+        return  ResponseEntity.ok(new MessageResponse("User registered successfully"));
+    }
+
+    @GetMapping("/username")
+    public String currentUsername(Authentication authentication){
+        if(authentication != null){
+            return authentication.getName();
+        }else {
+            return "";
+        }
+    }
+
+
+    @GetMapping("/userdetails")
+    public ResponseEntity<?> currentUserDetails(Authentication authentication){
+        UserDetailsImpl userDetails=(UserDetailsImpl) authentication.getPrincipal();
+
+        List<String> roles= userDetails
+                .getAuthorities()
+                .stream()
+                .map(item->item.getAuthority())
+                .collect(Collectors.toList());
+        UserInfoResponse userInfoResponse= new UserInfoResponse(userDetails.getId(),userDetails.getUsername(),roles);
+        return ResponseEntity.ok().body(userInfoResponse);
+    }
+    
+    @PostMapping("/signout")
+    public ResponseEntity<?> signoutUser(){
+        ResponseCookie cookie=jwtUtils.getCleanJwtCookie();
+
+        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE
+                ,cookie.toString()).body(new MessageResponse("you have been Signed Out!"));
+        }
+}
+**************************************************************************************************
+
+- Explanation- for each method 
+//sign in code
+@PostMapping("/signin")
+public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest){
+
+        Authentication authentication;
+        try{
+            authentication= authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            loginRequest.getUsername(),
+                            loginRequest.getPassword()
+                    )
+            );
+        }catch (ArithmeticException e){
+            Map<String, Object> map= new HashMap<>();
+            map.put("message","Bad credentials");
+            map.put("status", false);
+            return new ResponseEntity<Object>(map, HttpStatus.NOT_FOUND);
+        }
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetailsImpl userDetails= (UserDetailsImpl) authentication.getPrincipal();
+        ResponseCookie jwtCookie=jwtUtils.generateJwtCookie(userDetails);
+        List<String> roles= userDetails
+                .getAuthorities()
+                .stream()
+                .map(item->item.getAuthority())
+                .collect(Collectors.toList());
+        UserInfoResponse userInfoResponse= new UserInfoResponse(userDetails.getId(),userDetails.getUsername(),roles);
+        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE
+        ,jwtCookie.toString()).body(userInfoResponse);
+    }
+
+
+  - @PostMapping("/signin")
+  - public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest)
+
+
+- authentication = authenticationManager.authenticate(
+- new UsernamePasswordAuthenticationToken(
+- loginRequest.getUsername(),
+- loginRequest.getPassword()
+)
+);
+        Creates a UsernamePasswordAuthenticationToken (just a wrapper holding username/password).
+        authenticationManager.authenticate(...) triggers Spring Security’s login flow:
+        calls your UserDetailsServiceImpl.loadUserByUsername(username)
+        compares password using PasswordEncoder
+        if correct → returns a fully authenticated Authentication object
+        if wrong → throws an authentication exception
+        If login fails
+
+
+- catch (ArithmeticException e) { ... }
+        You are catching the wrong exception type here.
+        Wrong username/password does not throw ArithmeticException.
+        It usually throws BadCredentialsException (or AuthenticationException).
+        But logically, your intent is:
+        return JSON saying "Bad credentials".
+        Store Authentication in SecurityContext
+
+
+- SecurityContextHolder.getContext().setAuthentication(authentication);
+        Saves the authenticated user into the current request’s security context.
+        After this, Spring considers the request “logged in”.
+        Extract your custom principal (UserDetailsImpl)
+
+
+- UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        principal is the logged-in user identity object that you returned via UserDetailsServiceImpl.
+        You cast it to your custom class so you can access id, username, roles, etc.
+
+
+
+- ResponseCookie jwtCookie = jwtUtils.generateJwtCookie(userDetails);
+        Creates a JWT token string
+        Wraps it inside a cookie (Set-Cookie) for the client/browser
+        Collect roles as a simple list of strings
+
+
+- List<String> roles = userDetails.getAuthorities()
+- .stream()
+- .map(item -> item.getAuthority())
+- .collect(Collectors.toList());
+    Converts GrantedAuthority objects into plain strings like:
+    "ROLE_USER", "ROLE_ADMIN"
+    Build response body (user info)
+
+
+-   UserInfoResponse userInfoResponse = new UserInfoResponse(userDetails.getId(), userDetails.getUsername(), roles);
+    Return response
+
+
+- return ResponseEntity.ok()
+- .header(HttpHeaders.SET_COOKIE, jwtCookie.toString())
+- .body(userInfoResponse);
+      Adds a Set-Cookie header so browser stores JWT cookie
+
+- Returns user info JSON in body
+✅ Result: client is now logged in because JWT is stored in cookie.
+
+
+
+// signup code
+@PostMapping("/signup")
+public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signupRequest){
+
+        if(userRepository.existsByUsername(signupRequest.getUsername())){
+            return ResponseEntity.badRequest().body(new MessageResponse("ERROR: Username is already Taken!"));
+        }
+        if(userRepository.existsByEmail(signupRequest.getEmail())){
+            return ResponseEntity.badRequest().body(new MessageResponse("ERROR: Email is already Taken!"));
+        }
+
+        User user= new User(
+                signupRequest.getUsername(),
+                signupRequest.getEmail(),
+                encoder.encode(signupRequest.getPassword())
+        );
+
+        Set<String> setRoles= signupRequest.getRole();
+        Set<Role> roles= new HashSet<>();
+
+        if(setRoles==null){
+            Role userRole=roleRepository.findByRoleName(AppRole.ROLE_USER)
+                    .orElseThrow(()-> new RuntimeException("Role not found"));
+            roles.add(userRole);
+        }else{
+            //admin-->ROLE_ADMIN
+            //seller->ROLE_SELLER
+            setRoles.forEach(role->{
+                switch (role){
+                    case "admin":
+                        Role adminRole=roleRepository.findByRoleName(AppRole.ROLE_ADMIN)
+                                .orElseThrow(()-> new RuntimeException("Role not found"));
+                        roles.add(adminRole);
+                        break;
+                    case "seller":
+                        Role sellerRole=roleRepository.findByRoleName(AppRole.ROLE_SELLER)
+                                .orElseThrow(()-> new RuntimeException("Role not found"));
+                        roles.add(sellerRole);
+                        break;
+                    default:
+                        Role userRole=roleRepository.findByRoleName(AppRole.ROLE_USER)
+                                .orElseThrow(()-> new RuntimeException("Role not found"));
+                        roles.add(userRole);
+                }
+            });
+
+        }
+        user.setRoles(roles);
+        userRepository.save(user);
+        return  ResponseEntity.ok(new MessageResponse("User registered successfully"));
+    }
+
+
+
+EXPLANATION:- 
+
+- Check if username already exists
+if (userRepository.existsByUsername(signupRequest.getUsername())) {
+return ResponseEntity.badRequest().body(new MessageResponse("ERROR: Username is already Taken!"));
+}
+
+
+- Check if email already exists
+if (userRepository.existsByEmail(signupRequest.getEmail())) {
+return ResponseEntity.badRequest().body(new MessageResponse("ERROR: Email is already Taken!"));
+}
+
+
+- Create new User entity
+User user = new User(
+signupRequest.getUsername(),
+signupRequest.getEmail(),
+encoder.encode(signupRequest.getPassword())
+);
+Password is encoded (hashed) before saving to DB.
+
+- Read requested roles from request
+Set<String> setRoles = signupRequest.getRole();
+Set<Role> roles = new HashSet<>();
+
+
+If no roles provided → default to ROLE_USER
+        if (setRoles == null) {
+        Role userRole = roleRepository.findByRoleName(AppRole.ROLE_USER)
+        .orElseThrow(() -> new RuntimeException("Role not found"));
+        roles.add(userRole);
+        }
+
+
+- If roles are provided → map "admin"/"seller"/default to actual DB Role entities
+        setRoles.forEach(role -> {
+        switch (role) {
+        case "admin": ... ROLE_ADMIN
+        case "seller": ... ROLE_SELLER
+        default: ... ROLE_USER
+        }
+        });
+It fetches the correct Role entity from DB each time.
+Then adds them into roles.
+
+- Attach roles to user and save
+        user.setRoles(roles);
+        userRepository.save(user);
+
+
+- return success
+    return ResponseEntity.ok(new MessageResponse("User registered successfully"));
+
+✅ Result: user is created in DB with encoded password and role(s).
+
+
