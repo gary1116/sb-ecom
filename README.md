@@ -2398,3 +2398,993 @@ So you exclude the back-reference fields from toString().
     User * ↔ * Address via user_addresses
     User 1 → * Product (seller) via products.seller_id
     Category 1 → * Product via products.category_id (from your earlier code)
+
+# SECURITY
+
+check this section ***Spring security miniproject learning part for spring security related code***
+for explanation of below files  
+JwtUtils
+AuthTokenFilter
+AuthEntryPointJwt
+
+- UserDetailsImpl
+**********CODE**********
+  @NoArgsConstructor
+  @Data
+  public class UserDetailsImpl implements UserDetails {
+
+  private static final long serialVersionUID=1L;
+
+  private Long id;
+  private String username;
+  private String email;
+
+  @JsonIgnore
+  private String password;
+
+  private Collection<? extends GrantedAuthority> authorities;
+
+  public static UserDetailsImpl build(User user){
+
+        List<GrantedAuthority> authorities= user.getRoles().stream()
+                .map(role-> new SimpleGrantedAuthority(role.getRoleName().name()))
+                .collect(Collectors.toList());
+
+        return new UserDetailsImpl(
+                user.getUserId(),
+                user.getUsername(),
+                user.getEmail(),
+                user.getPassword(),
+                authorities
+
+        );
+  }
+
+
+    public UserDetailsImpl(Long id, String username, String email, String password, Collection<? extends GrantedAuthority> authority) {
+        this.id = id;
+        this.username = username;
+        this.email = email;
+        this.password = password;
+        this.authorities = authority;
+    }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return authorities;
+    }
+
+    @Override
+    public @Nullable String getPassword() {
+        return password;
+    }
+
+    @Override
+    public String getUsername() {
+        return username;
+    }
+
+    @Override
+    public boolean isAccountNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return true;
+    }
+
+    @Override
+    public boolean isCredentialsNonExpired() {
+        return true;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return UserDetails.super.isEnabled();
+    }
+
+    @Override
+    public boolean equals(Object o){
+        if(this==o)
+            return true;
+        if(o==null || getClass() != o.getClass())
+            return false;
+        UserDetailsImpl user = (UserDetailsImpl)  o;
+        return Objects.equals(id, user.id);
+    }
+}
+************************
+
+- EXPLANATION
+
+- @NoArgsConstructor
+Lombok generates a no-argument constructor.
+This is useful for frameworks, serialization, and general object creation.
+
+- @Data
+Lombok generates:
+getters and setters
+toString()
+equals() and hashCode()
+(We still override equals() manually.)
+
+- implements UserDetails
+This makes the class compatible with Spring Security.
+Spring Security will call methods like:
+getUsername()
+getPassword()
+getAuthorities()
+account-status methods (isAccountNonLocked(), etc.)
+
+- Serializable Identifier
+private static final long serialVersionUID = 1L;
+Used for Java serialization compatibility.
+Commonly added in UserDetails implementations.
+
+- Core User Fields
+private Long id;
+private String username;
+private String email;
+These fields store authenticated user information:
+id → useful for JWT claims, auditing, and identifying the user internally
+username → used by Spring Security for authentication
+email → extra user information
+
+- @JsonIgnore
+Prevents the password from being included in JSON responses.
+This avoids accidental password leakage in APIs.
+
+- Authorities (Roles / Permissions)
+- private Collection<? extends GrantedAuthority> authorities;
+Spring Security uses authorities to perform authorization checks.
+GrantedAuthority is used in expressions like:
+hasRole("ADMIN")
+hasAuthority("ADMIN")
+
+Static Factory Method: build(User user)
+- public static UserDetailsImpl build(User user)
+This method converts our database User entity into a UserDetailsImpl.
+
+- List<GrantedAuthority> authorities = user.getRoles().stream()
+- .map(role -> new SimpleGrantedAuthority(role.getRoleName().name()))
+- .collect(Collectors.toList());
+What this does:
+Retrieves roles from the database (e.g. ADMIN, USER)
+Converts each role into a GrantedAuthority
+Collects them into a list
+
+Example:
+Role enum ADMIN → authority "ADMIN"
+(If using hasRole("ADMIN"), you may need "ROLE_ADMIN" depending on configuration.)
+
+- return new UserDetailsImpl(
+- user.getUserId(),
+- user.getUsername(),
+- user.getEmail(),
+- user.getPassword(),
+- authorities
+- );
+
+
+Creates and returns a fully populated UserDetailsImpl object using DB values.
+Constructor
+- public UserDetailsImpl(Long id, String username, String email,
+- String password,
+- Collection<? extends GrantedAuthority> authority)
+Initializes all fields required by Spring Security.
+
+Required UserDetails Methods
+@Override
+public Collection<? extends GrantedAuthority> getAuthorities() {
+return authorities;
+}
+Spring Security uses this to determine the user’s roles/permissions.
+the rest are getters/setters
+
+
+- UserDetailsServiceImpl
+  **********CODE**********
+
+@Service
+public class UserDetailsServiceImpl implements UserDetailsService {
+
+    @Autowired
+    UserRepository userRepository;
+
+    @Override
+    @Transactional
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(()->
+                        new UsernameNotFoundException("Username not found with username:- "+username));
+        return UserDetailsImpl.build(user);
+    }
+}
+
+  ************************
+
+- @Service
+Marks this class as a Spring-managed bean.
+Spring automatically detects and registers it in the application context.
+Spring Security requires a UserDetailsService bean to perform authentication, so this annotation is mandatory.
+
+- implements UserDetailsService
+This interface is used by Spring Security during login.
+Spring Security will automatically call:
+loadUserByUsername(String username)
+when a user attempts to authenticate.
+
+Repository Injection
+- @Autowired
+- UserRepository userRepository;
+
+Spring injects UserRepository so we can:
+query the database
+fetch user information using JPA
+This repository is responsible for interacting with the users table.
+
+Core Authentication Method
+- @Override
+- @Transactional
+- public UserDetails loadUserByUsername(String username)
+- throws UsernameNotFoundException
+This is the most important method in the class.
+loadUserByUsername(String username)
+Spring Security calls this method automatically during authentication.
+What Spring passes:
+
+username → value entered by the user during login
+
+What Spring expects back:
+a UserDetails object if user exists
+an exception if user does not exist
+
+@Transactional
+Ensures that the database session remains open while the user is being loaded.
+This is important because:
+User has relationships (e.g. roles)
+Hibernate may lazily fetch roles
+without a transaction, a LazyInitializationException could occur
+So this annotation guarantees safe data loading.
+
+Fetching User from Database
+- User user = userRepository.findByUsername(username)
+Queries the database for a user with the given username.
+The method returns:
+Optional<User>
+Handling User Not Found
+.orElseThrow(() ->
+new UsernameNotFoundException(
+"Username not found with username:- " + username
+)
+);
+
+If no user is found:
+throws UsernameNotFoundException
+Spring Security catches this exception
+authentication fails automatically
+This is the correct and expected behavior for Spring Security.
+Converting User → UserDetails
+return UserDetailsImpl.build(user);
+Converts the JPA User entity into a UserDetailsImpl
+Adds roles as GrantedAuthority
+Returns the object Spring Security understands
+From this point onward:
+Spring Security compares passwords
+checks authorities
+decides whether authentication succeeds
+
+
+- WebSecurityConfig class
+************CODE************
+
+@Configuration
+@EnableWebSecurity
+public class WebSecurityConfig {
+
+    @Autowired
+    UserDetailsServiceImpl userDetailsService;
+
+    @Autowired
+    private AuthEntryPointJwt unAuthorizedHandler;
+
+    @Bean
+    public AuthTokenFilter authenticationJwtTokenFilter(){
+        return new AuthTokenFilter();
+    }
+
+    @Bean
+    public DaoAuthenticationProvider authenticationProvider(){
+        DaoAuthenticationProvider authenticationProvider= new DaoAuthenticationProvider(userDetailsService);
+        authenticationProvider.setPasswordEncoder(passwordEncoder());
+        return authenticationProvider;
+    }
+
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig){
+        return authConfig.getAuthenticationManager();
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder(){
+        return new BCryptPasswordEncoder();
+    }
+
+
+    @Bean
+    SecurityFilterChain filterChain(HttpSecurity http) throws Exception{
+        http.csrf(csrf->csrf.disable())
+                .exceptionHandling(exception->exception.authenticationEntryPoint(unAuthorizedHandler))
+                .sessionManagement(session->session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests((requests)->requests.
+                requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers("/v3/api-docs/**").permitAll()
+                        .requestMatchers("/swagger-ui/**").permitAll()
+                        .requestMatchers("/api/public/**").permitAll()
+                        .requestMatchers("/api/admin/**").permitAll()
+                        .requestMatchers("/api/test/**").permitAll()
+                        .requestMatchers("/images/**").permitAll()
+                        .anyRequest().authenticated());
+        http.authenticationProvider(authenticationProvider());
+        http.headers(headers->
+                headers.frameOptions(frameOptionsConfig ->
+                        frameOptionsConfig.sameOrigin()));
+        http.addFilterBefore(authenticationJwtTokenFilter(),
+                UsernamePasswordAuthenticationFilter.class);
+        return http.build();
+    }
+
+
+    @Bean
+    public WebSecurityCustomizer webSecurityCustomizer(){
+        return (web-> web.ignoring().requestMatchers(
+                "/v2/api-docs",
+                "configuration/ui",
+                "/swagger-resources/**",
+                "/configuration/security",
+                "/swagger-ui.html",
+                "/webjars/**"
+        ));
+    }
+}
+****************************
+
+
+- *****EXPLANATION*****
+@Configuration
+Marks this class as a Spring configuration class.
+Spring will scan it and execute the @Bean methods to register objects into the Spring container.
+
+@EnableWebSecurity
+Enables Spring Security’s web security support.
+Without this, your custom security config may not be applied.
+
+Dependencies injected
+@Autowired
+UserDetailsServiceImpl userDetailsService;
+Spring injects your custom UserDetailsServiceImpl, which loads users from DB during authentication.
+
+@Autowired
+private AuthEntryPointJwt unAuthorizedHandler;
+Injects your custom AuthEntryPointJwt.
+This is used when:
+a user accesses a protected endpoint
+but is not authenticated / token is missing or invalid
+Spring uses this entry point to return a proper 401 Unauthorized response.
+
+Beans in this class
+1) JWT Filter Bean
+   @Bean
+   public AuthTokenFilter authenticationJwtTokenFilter() {
+   return new AuthTokenFilter();
+   }
+Creates a Spring-managed bean of your JWT filter.
+This filter runs on every request and typically:
+reads the Authorization: Bearer <token> header
+validates JWT
+if valid → sets authentication in Spring Security context
+
+2) Authentication Provider Bean
+   @Bean
+   public DaoAuthenticationProvider authenticationProvider() {
+   DaoAuthenticationProvider authenticationProvider =
+   new DaoAuthenticationProvider(userDetailsService);
+   authenticationProvider.setPasswordEncoder(passwordEncoder());
+   return authenticationProvider;
+   }
+
+What is DaoAuthenticationProvider?
+
+It is Spring Security’s standard provider that authenticates users using:
+a UserDetailsService (to load user details)
+a PasswordEncoder (to compare passwords)
+Why pass userDetailsService in constructor?
+In newer Spring Security versions, the UserDetailsService is set via constructor.
+Why set password encoder?
+Because DB stores password as a hashed string (bcrypt).
+So Spring must compare raw password with hashed password using BCryptPasswordEncoder.
+
+3) AuthenticationManager (Important)
+   public AuthenticationManager authenticationManager(AuthenticationConfiguration authConfig) {
+   return authConfig.getAuthenticationManager();
+   }
+
+Otherwise it won’t be registered as a Spring bean and you can’t inject it elsewhere.
+
+4) Password Encoder Bean
+   @Bean
+   public PasswordEncoder passwordEncoder() {
+   return new BCryptPasswordEncoder();
+   }
+
+
+Creates a PasswordEncoder bean.
+BCrypt is used because:
+it is one-way hashing (cannot be reversed)
+it includes salt
+it is a recommended secure hashing mechanism
+
+SecurityFilterChain (Main Security Rules)
+- @Bean
+- SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+This is the most important configuration method in Spring Security 6+.
+Instead of extending WebSecurityConfigurerAdapter (old style), we define a SecurityFilterChain bean.
+
+Disable CSRF
+- http.csrf(csrf -> csrf.disable())
+CSRF protection is mainly needed for browser-based session apps.
+In a stateless JWT REST API, we commonly disable it because:
+we are not using server sessions
+JWT is sent in headers, not cookies (typical case)
+
+Configure exception handling
+- .exceptionHandling(exception ->
+- exception.authenticationEntryPoint(unAuthorizedHandler))
+If an unauthenticated user hits a protected endpoint,
+Spring uses AuthEntryPointJwt to return the response (usually 401).
+
+Make app stateless (JWT)
+- .sessionManagement(session ->
+- session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+This tells Spring:
+do NOT create sessions
+do NOT store logged-in state on server
+each request must carry its own authentication (JWT)
+
+Authorization Rules (which endpoints are public)
+- .authorizeHttpRequests((requests) -> requests
+- .requestMatchers("/api/auth/**").permitAll()
+- .requestMatchers("/v3/api-docs/**").permitAll()
+- .requestMatchers("/swagger-ui/**").permitAll()
+- .requestMatchers("/api/public/**").permitAll()
+- .requestMatchers("/api/admin/**").permitAll()
+- .requestMatchers("/api/test/**").permitAll()
+- .requestMatchers("/images/**").permitAll()
+- .anyRequest().authenticated()
+- );
+
+
+Meaning:
+These paths are accessible without login (permitAll())
+Any other request must be authenticated (authenticated())
+
+⚠️ Note: You currently permit /api/admin/** for everyone.
+Usually admin endpoints should be restricted using roles, e.g.
+
+- .requestMatchers("/api/admin/**").hasRole("ADMIN")
+
+Register authentication provider
+- http.authenticationProvider(authenticationProvider());
+
+
+This tells Spring Security to use your configured DaoAuthenticationProvider
+(which uses DB users + bcrypt) for authentication.
+
+Allow H2 console / frames (if needed)
+- http.headers(headers ->
+- headers.frameOptions(frameOptionsConfig ->
+- frameOptionsConfig.sameOrigin()));
+
+
+Browsers block frames by default for security.
+H2 console uses frames, so we allow frames from the same origin.
+
+Add JWT filter into filter chain
+- http.addFilterBefore(authenticationJwtTokenFilter(),
+- UsernamePasswordAuthenticationFilter.class);
+This inserts your JWT filter before the normal username/password auth filter.
+Meaning:
+JWT will be checked early
+if token is valid, user becomes authenticated before reaching controllers
+
+Build SecurityFilterChain
+- return http.build();
+Finalizes and returns the security configuration.
+
+- WebSecurityCustomizer (Ignore paths completely)
+@Bean
+public WebSecurityCustomizer webSecurityCustomizer() {
+return (web -> web.ignoring().requestMatchers(
+"/v2/api-docs",
+"configuration/ui",
+"/swagger-resources/**",
+"/configuration/security",
+"/swagger-ui.html",
+"/webjars/**"
+));
+}
+
+This tells Spring Security to completely ignore these paths.
+Ignored paths are not even processed by the security filter chain.
+This is typically used for:
+Swagger static resources
+documentation endpoints
+****************************
+Why create multiple @Beans instead of normal methods?
+In Spring, @Bean methods are not “just methods”.
+They register objects into the Spring container so that:
+✅ Spring can inject them using @Autowired
+✅ Spring creates only one instance (singleton by default)
+✅ Spring manages their lifecycle
+✅ Other configurations can reuse them
+✅ Security infrastructure expects beans of specific types (like SecurityFilterChain, PasswordEncoder, etc.)
+If these were plain methods without @Bean:
+Spring would NOT manage them
+you could not reliably inject them across the app
+Spring Security would not automatically pick them up
+*********************************
+
+
+*****UPDATED METHODS IN JWTUTILS TO PASS COOKIE WITH JWT TOKEN*****
+
+    public String getJwtFrmCookies(HttpServletRequest request){
+        Cookie cookie= WebUtils.getCookie(request,jwtCookie);
+            if(cookie!=null){
+            return cookie.getValue();
+            }else {
+            return null;
+        }
+    }
+
+- Explanation :-
+  - HttpServletRequest request
+    This is the incoming HTTP request (contains headers, cookies, params, etc.)
+
+  - WebUtils.getCookie(request, jwtCookie)
+      Searches the request’s cookies for a cookie whose name equals jwtCookie
+      jwtCookie is probably a variable like "jwt" or "sbEcomJwt"
+
+  - if(cookie != null)
+      Means the cookie was found in the request
+  - return cookie.getValue()
+      Returns the actual JWT string stored inside the cookie
+
+  - else return null
+      If cookie doesn’t exist → no JWT is present → user is not authenticated (or token not sent)
+
+✅ Purpose: Extract JWT from request cookies during authentication.
+
+
+        public ResponseCookie generateJwtCookie(UserDetailsImpl userPrincipal){
+        String jwt = generateTokenFromUsername(userPrincipal.getUsername());
+            ResponseCookie cookie= ResponseCookie.from(jwtCookie,jwt)
+            .path("/api")
+            .maxAge(24*60*60)
+            .httpOnly(false)
+            .build();
+            return  cookie;
+        }
+
+- EXPLANATION:-
+  - UserDetailsImpl userPrincipal
+    This is your logged-in user object (the “principal”), containing username, id, roles, etc.
+
+  - generateTokenFromUsername(userPrincipal.getUsername())
+      Creates a JWT token string using the username
+
+  - ResponseCookie.from(jwtCookie, jwt)
+      Builds a cookie you will send back in the HTTP response
+      Cookie name = jwtCookie
+      Cookie value = jwt
+
+  - .path("/api")
+      Cookie will be sent by the browser only for requests whose path starts with /api
+      Example:
+      ✅ /api/products → cookie sent
+      ❌ /swagger-ui/index.html → cookie not sent
+
+  - .maxAge(24*60*60)
+      Cookie expiry time in seconds
+      24*60*60 = 86400 seconds = 1 day
+      After this, browser will delete/ignore the cookie
+
+  - .httpOnly(false)
+
+    ⚠️ Important security detail:
+    httpOnly(false) means JavaScript can read this cookie (via document.cookie)
+    That increases risk if you ever get XSS (malicious JS running in browser)
+    Usually for JWT cookies, best practice is:
+    ✅ httpOnly(true) (JS can’t read it)
+
+  - .build()
+        Finalizes the cookie object
+        return cookie
+        Returned cookie is usually added to response like:
+        response.addHeader("Set-Cookie", cookie.toString())
+
+✅ Purpose: Create a Set-Cookie response containing JWT so the browser stores it.
+
+
+        public ResponseCookie getCleanJwtCookie(){
+        ResponseCookie cookie = ResponseCookie.from(jwtCookie, null)
+            .path("/api")
+            .build();
+            return cookie;
+        }
+
+- EXPLANATION:-
+  - ResponseCookie.from(jwtCookie, null)
+        Creates a cookie with the same name but no value
+        This is typically used to clear the cookie on logout
+
+  - .path("/api")
+      Must match the same path used when setting the cookie
+      Otherwise browser treats it like a different cookie and won’t delete the original
+
+  - .build()
+      Builds the cookie
+✅ Purpose: Create a cookie that overwrites the JWT cookie with empty/null value (used for logout).
+***************************************************************************************************
+
+
+*************AUTHCONTROLLER CODE*************
+
+@RestController
+@RequestMapping("api/auth")
+public class AuthController {
+
+    @Autowired
+    private AuthenticationManager authenticationManager;
+
+    @Autowired
+    private JwtUtils jwtUtils;
+
+    @Autowired
+    UserRepository userRepository;
+
+    @Autowired
+    PasswordEncoder encoder;
+
+    @Autowired
+    RoleRepository roleRepository;
+
+
+    @PostMapping("/signin")
+    public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest){
+
+        Authentication authentication;
+        try{
+            authentication= authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            loginRequest.getUsername(),
+                            loginRequest.getPassword()
+                    )
+            );
+        }catch (ArithmeticException e){
+            Map<String, Object> map= new HashMap<>();
+            map.put("message","Bad credentials");
+            map.put("status", false);
+            return new ResponseEntity<Object>(map, HttpStatus.NOT_FOUND);
+        }
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetailsImpl userDetails= (UserDetailsImpl) authentication.getPrincipal();
+        ResponseCookie jwtCookie=jwtUtils.generateJwtCookie(userDetails);
+        List<String> roles= userDetails
+                .getAuthorities()
+                .stream()
+                .map(item->item.getAuthority())
+                .collect(Collectors.toList());
+        UserInfoResponse userInfoResponse= new UserInfoResponse(userDetails.getId(),userDetails.getUsername(),roles);
+        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE
+        ,jwtCookie.toString()).body(userInfoResponse);
+    }
+
+    @PostMapping("/signup")
+    public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signupRequest){
+
+        if(userRepository.existsByUsername(signupRequest.getUsername())){
+            return ResponseEntity.badRequest().body(new MessageResponse("ERROR: Username is already Taken!"));
+        }
+        if(userRepository.existsByEmail(signupRequest.getEmail())){
+            return ResponseEntity.badRequest().body(new MessageResponse("ERROR: Email is already Taken!"));
+        }
+
+        User user= new User(
+                signupRequest.getUsername(),
+                signupRequest.getEmail(),
+                encoder.encode(signupRequest.getPassword())
+        );
+
+        Set<String> setRoles= signupRequest.getRole();
+        Set<Role> roles= new HashSet<>();
+
+        if(setRoles==null){
+            Role userRole=roleRepository.findByRoleName(AppRole.ROLE_USER)
+                    .orElseThrow(()-> new RuntimeException("Role not found"));
+            roles.add(userRole);
+        }else{
+            //admin-->ROLE_ADMIN
+            //seller->ROLE_SELLER
+            setRoles.forEach(role->{
+                switch (role){
+                    case "admin":
+                        Role adminRole=roleRepository.findByRoleName(AppRole.ROLE_ADMIN)
+                                .orElseThrow(()-> new RuntimeException("Role not found"));
+                        roles.add(adminRole);
+                        break;
+                    case "seller":
+                        Role sellerRole=roleRepository.findByRoleName(AppRole.ROLE_SELLER)
+                                .orElseThrow(()-> new RuntimeException("Role not found"));
+                        roles.add(sellerRole);
+                        break;
+                    default:
+                        Role userRole=roleRepository.findByRoleName(AppRole.ROLE_USER)
+                                .orElseThrow(()-> new RuntimeException("Role not found"));
+                        roles.add(userRole);
+                }
+            });
+
+        }
+        user.setRoles(roles);
+        userRepository.save(user);
+        return  ResponseEntity.ok(new MessageResponse("User registered successfully"));
+    }
+
+    @GetMapping("/username")
+    public String currentUsername(Authentication authentication){
+        if(authentication != null){
+            return authentication.getName();
+        }else {
+            return "";
+        }
+    }
+
+
+    @GetMapping("/userdetails")
+    public ResponseEntity<?> currentUserDetails(Authentication authentication){
+        UserDetailsImpl userDetails=(UserDetailsImpl) authentication.getPrincipal();
+
+        List<String> roles= userDetails
+                .getAuthorities()
+                .stream()
+                .map(item->item.getAuthority())
+                .collect(Collectors.toList());
+        UserInfoResponse userInfoResponse= new UserInfoResponse(userDetails.getId(),userDetails.getUsername(),roles);
+        return ResponseEntity.ok().body(userInfoResponse);
+    }
+    
+    @PostMapping("/signout")
+    public ResponseEntity<?> signoutUser(){
+        ResponseCookie cookie=jwtUtils.getCleanJwtCookie();
+
+        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE
+                ,cookie.toString()).body(new MessageResponse("you have been Signed Out!"));
+        }
+}
+**************************************************************************************************
+
+- Explanation- for each method 
+//sign in code
+@PostMapping("/signin")
+public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest){
+
+        Authentication authentication;
+        try{
+            authentication= authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            loginRequest.getUsername(),
+                            loginRequest.getPassword()
+                    )
+            );
+        }catch (ArithmeticException e){
+            Map<String, Object> map= new HashMap<>();
+            map.put("message","Bad credentials");
+            map.put("status", false);
+            return new ResponseEntity<Object>(map, HttpStatus.NOT_FOUND);
+        }
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        UserDetailsImpl userDetails= (UserDetailsImpl) authentication.getPrincipal();
+        ResponseCookie jwtCookie=jwtUtils.generateJwtCookie(userDetails);
+        List<String> roles= userDetails
+                .getAuthorities()
+                .stream()
+                .map(item->item.getAuthority())
+                .collect(Collectors.toList());
+        UserInfoResponse userInfoResponse= new UserInfoResponse(userDetails.getId(),userDetails.getUsername(),roles);
+        return ResponseEntity.ok().header(HttpHeaders.SET_COOKIE
+        ,jwtCookie.toString()).body(userInfoResponse);
+    }
+
+
+  - @PostMapping("/signin")
+  - public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest)
+
+
+- authentication = authenticationManager.authenticate(
+- new UsernamePasswordAuthenticationToken(
+- loginRequest.getUsername(),
+- loginRequest.getPassword()
+)
+);
+        Creates a UsernamePasswordAuthenticationToken (just a wrapper holding username/password).
+        authenticationManager.authenticate(...) triggers Spring Security’s login flow:
+        calls your UserDetailsServiceImpl.loadUserByUsername(username)
+        compares password using PasswordEncoder
+        if correct → returns a fully authenticated Authentication object
+        if wrong → throws an authentication exception
+        If login fails
+
+
+- catch (ArithmeticException e) { ... }
+        You are catching the wrong exception type here.
+        Wrong username/password does not throw ArithmeticException.
+        It usually throws BadCredentialsException (or AuthenticationException).
+        But logically, your intent is:
+        return JSON saying "Bad credentials".
+        Store Authentication in SecurityContext
+
+
+- SecurityContextHolder.getContext().setAuthentication(authentication);
+        Saves the authenticated user into the current request’s security context.
+        After this, Spring considers the request “logged in”.
+        Extract your custom principal (UserDetailsImpl)
+
+
+- UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+        principal is the logged-in user identity object that you returned via UserDetailsServiceImpl.
+        You cast it to your custom class so you can access id, username, roles, etc.
+
+
+
+- ResponseCookie jwtCookie = jwtUtils.generateJwtCookie(userDetails);
+        Creates a JWT token string
+        Wraps it inside a cookie (Set-Cookie) for the client/browser
+        Collect roles as a simple list of strings
+
+
+- List<String> roles = userDetails.getAuthorities()
+- .stream()
+- .map(item -> item.getAuthority())
+- .collect(Collectors.toList());
+    Converts GrantedAuthority objects into plain strings like:
+    "ROLE_USER", "ROLE_ADMIN"
+    Build response body (user info)
+
+
+-   UserInfoResponse userInfoResponse = new UserInfoResponse(userDetails.getId(), userDetails.getUsername(), roles);
+    Return response
+
+
+- return ResponseEntity.ok()
+- .header(HttpHeaders.SET_COOKIE, jwtCookie.toString())
+- .body(userInfoResponse);
+      Adds a Set-Cookie header so browser stores JWT cookie
+
+- Returns user info JSON in body
+✅ Result: client is now logged in because JWT is stored in cookie.
+
+
+
+// signup code
+@PostMapping("/signup")
+public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signupRequest){
+
+        if(userRepository.existsByUsername(signupRequest.getUsername())){
+            return ResponseEntity.badRequest().body(new MessageResponse("ERROR: Username is already Taken!"));
+        }
+        if(userRepository.existsByEmail(signupRequest.getEmail())){
+            return ResponseEntity.badRequest().body(new MessageResponse("ERROR: Email is already Taken!"));
+        }
+
+        User user= new User(
+                signupRequest.getUsername(),
+                signupRequest.getEmail(),
+                encoder.encode(signupRequest.getPassword())
+        );
+
+        Set<String> setRoles= signupRequest.getRole();
+        Set<Role> roles= new HashSet<>();
+
+        if(setRoles==null){
+            Role userRole=roleRepository.findByRoleName(AppRole.ROLE_USER)
+                    .orElseThrow(()-> new RuntimeException("Role not found"));
+            roles.add(userRole);
+        }else{
+            //admin-->ROLE_ADMIN
+            //seller->ROLE_SELLER
+            setRoles.forEach(role->{
+                switch (role){
+                    case "admin":
+                        Role adminRole=roleRepository.findByRoleName(AppRole.ROLE_ADMIN)
+                                .orElseThrow(()-> new RuntimeException("Role not found"));
+                        roles.add(adminRole);
+                        break;
+                    case "seller":
+                        Role sellerRole=roleRepository.findByRoleName(AppRole.ROLE_SELLER)
+                                .orElseThrow(()-> new RuntimeException("Role not found"));
+                        roles.add(sellerRole);
+                        break;
+                    default:
+                        Role userRole=roleRepository.findByRoleName(AppRole.ROLE_USER)
+                                .orElseThrow(()-> new RuntimeException("Role not found"));
+                        roles.add(userRole);
+                }
+            });
+
+        }
+        user.setRoles(roles);
+        userRepository.save(user);
+        return  ResponseEntity.ok(new MessageResponse("User registered successfully"));
+    }
+
+
+
+EXPLANATION:- 
+
+- Check if username already exists
+if (userRepository.existsByUsername(signupRequest.getUsername())) {
+return ResponseEntity.badRequest().body(new MessageResponse("ERROR: Username is already Taken!"));
+}
+
+
+- Check if email already exists
+if (userRepository.existsByEmail(signupRequest.getEmail())) {
+return ResponseEntity.badRequest().body(new MessageResponse("ERROR: Email is already Taken!"));
+}
+
+
+- Create new User entity
+User user = new User(
+signupRequest.getUsername(),
+signupRequest.getEmail(),
+encoder.encode(signupRequest.getPassword())
+);
+Password is encoded (hashed) before saving to DB.
+
+- Read requested roles from request
+Set<String> setRoles = signupRequest.getRole();
+Set<Role> roles = new HashSet<>();
+
+
+If no roles provided → default to ROLE_USER
+        if (setRoles == null) {
+        Role userRole = roleRepository.findByRoleName(AppRole.ROLE_USER)
+        .orElseThrow(() -> new RuntimeException("Role not found"));
+        roles.add(userRole);
+        }
+
+
+- If roles are provided → map "admin"/"seller"/default to actual DB Role entities
+        setRoles.forEach(role -> {
+        switch (role) {
+        case "admin": ... ROLE_ADMIN
+        case "seller": ... ROLE_SELLER
+        default: ... ROLE_USER
+        }
+        });
+It fetches the correct Role entity from DB each time.
+Then adds them into roles.
+
+- Attach roles to user and save
+        user.setRoles(roles);
+        userRepository.save(user);
+
+
+- return success
+    return ResponseEntity.ok(new MessageResponse("User registered successfully"));
+
+✅ Result: user is created in DB with encoded password and role(s).
+
+
