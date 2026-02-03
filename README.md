@@ -2935,3 +2935,105 @@ Spring Security would not automatically pick them up
 *********************************
 
 
+*****UPDATED METHODS IN JWTUTILS TO PASS COOKIE WITH JWT TOKEN*****
+
+    public String getJwtFrmCookies(HttpServletRequest request){
+        Cookie cookie= WebUtils.getCookie(request,jwtCookie);
+            if(cookie!=null){
+            return cookie.getValue();
+            }else {
+            return null;
+        }
+    }
+
+- Explanation :-
+  - HttpServletRequest request
+    This is the incoming HTTP request (contains headers, cookies, params, etc.)
+
+  - WebUtils.getCookie(request, jwtCookie)
+      Searches the request’s cookies for a cookie whose name equals jwtCookie
+      jwtCookie is probably a variable like "jwt" or "sbEcomJwt"
+
+  - if(cookie != null)
+      Means the cookie was found in the request
+  - return cookie.getValue()
+      Returns the actual JWT string stored inside the cookie
+
+  - else return null
+      If cookie doesn’t exist → no JWT is present → user is not authenticated (or token not sent)
+
+✅ Purpose: Extract JWT from request cookies during authentication.
+
+
+        public ResponseCookie generateJwtCookie(UserDetailsImpl userPrincipal){
+        String jwt = generateTokenFromUsername(userPrincipal.getUsername());
+            ResponseCookie cookie= ResponseCookie.from(jwtCookie,jwt)
+            .path("/api")
+            .maxAge(24*60*60)
+            .httpOnly(false)
+            .build();
+            return  cookie;
+        }
+
+- EXPLANATION:-
+  - UserDetailsImpl userPrincipal
+    This is your logged-in user object (the “principal”), containing username, id, roles, etc.
+
+  - generateTokenFromUsername(userPrincipal.getUsername())
+      Creates a JWT token string using the username
+
+  - ResponseCookie.from(jwtCookie, jwt)
+      Builds a cookie you will send back in the HTTP response
+      Cookie name = jwtCookie
+      Cookie value = jwt
+
+  - .path("/api")
+      Cookie will be sent by the browser only for requests whose path starts with /api
+      Example:
+      ✅ /api/products → cookie sent
+      ❌ /swagger-ui/index.html → cookie not sent
+
+  - .maxAge(24*60*60)
+      Cookie expiry time in seconds
+      24*60*60 = 86400 seconds = 1 day
+      After this, browser will delete/ignore the cookie
+
+  - .httpOnly(false)
+
+    ⚠️ Important security detail:
+    httpOnly(false) means JavaScript can read this cookie (via document.cookie)
+    That increases risk if you ever get XSS (malicious JS running in browser)
+    Usually for JWT cookies, best practice is:
+    ✅ httpOnly(true) (JS can’t read it)
+
+  - .build()
+        Finalizes the cookie object
+        return cookie
+        Returned cookie is usually added to response like:
+        response.addHeader("Set-Cookie", cookie.toString())
+
+✅ Purpose: Create a Set-Cookie response containing JWT so the browser stores it.
+
+
+        public ResponseCookie getCleanJwtCookie(){
+        ResponseCookie cookie = ResponseCookie.from(jwtCookie, null)
+            .path("/api")
+            .build();
+            return cookie;
+        }
+
+- EXPLANATION:-
+  - ResponseCookie.from(jwtCookie, null)
+        Creates a cookie with the same name but no value
+        This is typically used to clear the cookie on logout
+
+  - .path("/api")
+      Must match the same path used when setting the cookie
+      Otherwise browser treats it like a different cookie and won’t delete the original
+
+  - .build()
+      Builds the cookie
+✅ Purpose: Create a cookie that overwrites the JWT cookie with empty/null value (used for logout).
+***************************************************************************************************
+
+
