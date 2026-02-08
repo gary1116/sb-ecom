@@ -3278,9 +3278,9 @@ public ResponseEntity<?> authenticateUser(@RequestBody LoginRequest loginRequest
 
 
 // signup code
-@PostMapping("/signup")
-public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signupRequest){
 
+        @PostMapping("/signup")
+        public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signupRequest){
         if(userRepository.existsByUsername(signupRequest.getUsername())){
             return ResponseEntity.badRequest().body(new MessageResponse("ERROR: Username is already Taken!"));
         }
