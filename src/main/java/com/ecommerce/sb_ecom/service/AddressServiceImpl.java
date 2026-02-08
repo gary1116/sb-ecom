@@ -5,6 +5,7 @@ import com.ecommerce.sb_ecom.model.Address;
 import com.ecommerce.sb_ecom.model.User;
 import com.ecommerce.sb_ecom.payload.AddressDTO;
 import com.ecommerce.sb_ecom.repository.AddressRepository;
+import com.ecommerce.sb_ecom.repository.UserRepository;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,9 @@ public class AddressServiceImpl implements AddressService{
 
     @Autowired
     AddressRepository addressRepository;
+
+    @Autowired
+    UserRepository userRepository;
 
 
     @Override
@@ -64,5 +68,28 @@ public class AddressServiceImpl implements AddressService{
                         modelMapper.map(address,AddressDTO.class)
                 ).collect(Collectors.toList());
     return addressDTOList;
+    }
+
+    @Override
+    public AddressDTO updateAddressById(Long addressId, AddressDTO addressDTO) {
+        Address address=addressRepository.findById(addressId)
+                .orElseThrow(()->new ResourceNotFoundException("Address","addressId",addressId));
+
+        address.setCity(addressDTO.getCity());
+        address.setZipCode(addressDTO.getZipCode());
+        address.setState(addressDTO.getState());
+        address.setCountry(addressDTO.getCountry());
+        address.setStreet(addressDTO.getStreet());
+        address.setBuildingName(addressDTO.getBuildingName());
+
+        Address updatedAddress=addressRepository.save(address);
+        User user=address.getUser();
+        user.getAddresses().removeIf(addressObject->addressObject.getAddressId().equals(addressId));
+        user.getAddresses().add(updatedAddress);
+
+        userRepository.save(user);
+
+        return  modelMapper.map(updatedAddress,AddressDTO.class);
+
     }
 }
