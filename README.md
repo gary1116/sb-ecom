@@ -3388,3 +3388,15 @@ Then adds them into roles.
 ✅ Result: user is created in DB with encoded password and role(s).
 
 
+
+- SWAGGER-UI
+
+Added swagger ui depenendecy
+
+    <dependency>
+    <groupId>org.springdoc</groupId>
+    <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+    <version>3.0.1</version>
+    </dependency>
+
+so that we can check api deocumentation link:- http://localhost:8080/swagger-ui/index.html#/category-controller/updateCategory
